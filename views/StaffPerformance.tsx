@@ -1,10 +1,25 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface Props {
     onBack: () => void;
 }
 
 export const StaffPerformance: React.FC<Props> = ({ onBack }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const allStaff = [
+    { rank: 1, name: "Rajesh Kumar", region: "Tumkur Region", score: "92.4%", scoreColor: "text-green-600", avatarUrl: "https://picsum.photos/100/100?random=1", metrics: [{ l: 'FTOD', v: '4.8%', c: 'text-green-500' }, { l: '1-30 DPD', v: '2.1%', c: 'text-green-500' }, { l: '31-60 DPD', v: '1.2%', c: 'text-yellow-500' }] },
+    { rank: 2, name: "Anjali Singh", region: "Kolar District", score: "88.1%", scoreColor: "text-green-600", avatarUrl: "https://picsum.photos/100/100?random=2", metrics: [{ l: 'FTOD', v: '3.9%', c: 'text-green-500' }, { l: '1-30 DPD', v: '1.8%', c: 'text-green-500' }, { l: '31-60 DPD', v: '0.9%', c: 'text-green-500' }] },
+    { rank: 3, name: "Priya Sharma", region: "Tiptur Zone", score: "76.5%", scoreColor: "text-orange-500", avatarUrl: "https://picsum.photos/100/100?random=3", metrics: [{ l: 'FTOD', v: '2.5%', c: 'text-yellow-500' }, { l: '1-30 DPD', v: '4.1%', c: 'text-red-500' }, { l: '31-60 DPD', v: '1.1%', c: 'text-green-500' }] },
+    { rank: 4, name: "Vikram M.", region: "Chikkamagaluru", score: "62.3%", scoreColor: "text-orange-500", initials: "VM", metrics: [{ l: 'FTOD', v: '1.2%', c: 'text-red-500' }, { l: '1-30 DPD', v: '3.2%', c: 'text-orange-500' }, { l: '31-60 DPD', v: '4.5%', c: 'text-red-500' }] },
+    { rank: 5, name: "Suresh Rao", region: "Vijayapura", score: "45.8%", scoreColor: "text-red-500", initials: "SR", metrics: [{ l: 'FTOD', v: '0.8%', c: 'text-red-500' }, { l: '1-30 DPD', v: '5.1%', c: 'text-red-500' }, { l: '31-60 DPD', v: '6.2%', c: 'text-red-500' }] }
+  ];
+
+  const filteredStaff = allStaff.filter(staff => 
+    staff.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    staff.region.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="min-h-screen pb-24">
       <header className="sticky top-0 z-20 bg-surface-light dark:bg-surface-dark shadow-sm px-4 pt-12 pb-4">
@@ -19,7 +34,13 @@ export const StaffPerformance: React.FC<Props> = ({ onBack }) => {
                 <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <span className="material-icons-round text-gray-400">search</span>
                 </span>
-                <input className="block w-full pl-10 pr-3 py-3 border-none rounded-xl bg-gray-100 dark:bg-gray-800 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary dark:text-white" placeholder="Search officer or region..." type="text"/>
+                <input 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="block w-full pl-10 pr-3 py-3 border-none rounded-xl bg-gray-100 dark:bg-gray-800 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary dark:text-white" 
+                    placeholder="Search officer or region..." 
+                    type="text"
+                />
             </div>
         </div>
         <div className="flex items-center gap-3 mt-4 overflow-x-auto no-scrollbar">
@@ -36,74 +57,25 @@ export const StaffPerformance: React.FC<Props> = ({ onBack }) => {
       </header>
       
        <main className="p-4 space-y-4">
-            <StaffCard 
-                rank={1}
-                name="Rajesh Kumar"
-                region="Tumkur Region"
-                score="92.4%"
-                scoreColor="text-green-600"
-                avatarUrl="https://picsum.photos/100/100?random=1"
-                metrics={[
-                    { l: 'FTOD', v: '4.8%', c: 'text-green-500' },
-                    { l: '1-30 DPD', v: '2.1%', c: 'text-green-500' },
-                    { l: '31-60 DPD', v: '1.2%', c: 'text-yellow-500' },
-                ]}
-            />
-            <StaffCard 
-                rank={2}
-                name="Anjali Singh"
-                region="Kolar District"
-                score="88.1%"
-                scoreColor="text-green-600"
-                avatarUrl="https://picsum.photos/100/100?random=2"
-                metrics={[
-                    { l: 'FTOD', v: '3.9%', c: 'text-green-500' },
-                    { l: '1-30 DPD', v: '1.8%', c: 'text-green-500' },
-                    { l: '31-60 DPD', v: '0.9%', c: 'text-green-500' },
-                ]}
-            />
-             <StaffCard 
-                rank={3}
-                name="Priya Sharma"
-                region="Tiptur Zone"
-                score="76.5%"
-                scoreColor="text-orange-500"
-                avatarUrl="https://picsum.photos/100/100?random=3"
-                metrics={[
-                    { l: 'FTOD', v: '2.5%', c: 'text-yellow-500' },
-                    { l: '1-30 DPD', v: '4.1%', c: 'text-red-500' },
-                    { l: '31-60 DPD', v: '1.1%', c: 'text-green-500' },
-                ]}
-            />
-             <StaffCard 
-                rank={4}
-                name="Vikram M."
-                region="Chikkamagaluru"
-                score="62.3%"
-                scoreColor="text-orange-500"
-                initials="VM"
-                metrics={[
-                    { l: 'FTOD', v: '1.2%', c: 'text-red-500' },
-                    { l: '1-30 DPD', v: '3.2%', c: 'text-orange-500' },
-                    { l: '31-60 DPD', v: '4.5%', c: 'text-red-500' },
-                ]}
-            />
-             <StaffCard 
-                rank={5}
-                name="Suresh Rao"
-                region="Vijayapura"
-                score="45.8%"
-                scoreColor="text-red-500"
-                initials="SR"
-                metrics={[
-                    { l: 'FTOD', v: '0.8%', c: 'text-red-500' },
-                    { l: '1-30 DPD', v: '5.1%', c: 'text-red-500' },
-                    { l: '31-60 DPD', v: '6.2%', c: 'text-red-500' },
-                ]}
-            />
+            {filteredStaff.length > 0 ? (
+                filteredStaff.map((staff, index) => (
+                    <StaffCard 
+                        key={index}
+                        {...staff}
+                    />
+                ))
+            ) : (
+                <div className="text-center py-10 text-gray-400">
+                    <span className="material-icons-round text-4xl mb-2">search_off</span>
+                    <p>No staff found matching "{searchTerm}"</p>
+                </div>
+            )}
        </main>
         <div className="fixed bottom-24 right-6 z-30">
-            <button className="bg-primary hover:bg-orange-600 text-white p-4 rounded-full shadow-lg transition-transform hover:scale-105 flex items-center justify-center">
+            <button 
+                onClick={() => alert("Exporting leaderboard data...")}
+                className="bg-primary hover:bg-orange-600 text-white p-4 rounded-full shadow-lg transition-transform hover:scale-105 flex items-center justify-center active:scale-90"
+            >
             <span className="material-icons-round">download</span>
             </button>
       </div>

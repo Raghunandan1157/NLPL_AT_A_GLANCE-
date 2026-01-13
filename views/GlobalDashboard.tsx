@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ViewState } from '../types';
 import { DonutChart } from '../components/DonutChart';
 
@@ -7,6 +7,14 @@ interface Props {
 }
 
 export const GlobalDashboard: React.FC<Props> = ({ onNavigate }) => {
+  const [activeTab, setActiveTab] = useState<'IGL' | 'FIG' | 'IL'>('IGL');
+
+  const handleDownload = () => {
+    alert("Report download started for " + activeTab + " segment.");
+  };
+
+  const tabs = ['IGL', 'FIG', 'IL'] as const;
+
   return (
     <div className="min-h-screen pb-24">
       {/* Header */}
@@ -21,15 +29,19 @@ export const GlobalDashboard: React.FC<Props> = ({ onNavigate }) => {
           <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Global Report • Updated: 13-01-2026 @ 12:10 PM</p>
         </div>
         <div className="flex items-center justify-between mt-6 bg-gray-100 dark:bg-gray-900 p-1 rounded-xl">
-          <button className="flex-1 py-2 text-sm font-semibold rounded-lg bg-surface-light dark:bg-surface-dark shadow-sm text-primary transition-all">
-            IGL
-          </button>
-          <button className="flex-1 py-2 text-sm font-medium rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-all">
-            FIG
-          </button>
-          <button className="flex-1 py-2 text-sm font-medium rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-all">
-            IL
-          </button>
+          {tabs.map((tab) => (
+             <button
+               key={tab}
+               onClick={() => setActiveTab(tab)}
+               className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
+                 activeTab === tab 
+                   ? 'bg-surface-light dark:bg-surface-dark shadow-sm text-primary' 
+                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+               }`}
+             >
+               {tab}
+             </button>
+          ))}
         </div>
       </header>
 
@@ -38,10 +50,10 @@ export const GlobalDashboard: React.FC<Props> = ({ onNavigate }) => {
         <section className="bg-surface-light dark:bg-surface-dark rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <h2 className="text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wider">Overall Performance</h2>
+              <h2 className="text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wider">Overall Performance ({activeTab})</h2>
               <p className="text-2xl font-bold mt-1">₹ 4.2 Cr <span className="text-sm font-normal text-gray-500 dark:text-gray-400">/ 12.5 Cr Demand</span></p>
             </div>
-            <DonutChart percentage={34} size={56} />
+            <DonutChart percentage={activeTab === 'IGL' ? 34 : activeTab === 'FIG' ? 62 : 45} size={56} />
           </div>
           
           <div className="grid grid-cols-2 gap-4 mt-2">
@@ -97,7 +109,7 @@ export const GlobalDashboard: React.FC<Props> = ({ onNavigate }) => {
           {/* Card 1 */}
           <div 
              onClick={() => onNavigate('REGION_DETAIL')}
-             className="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 active:scale-[0.99] transition-transform cursor-pointer"
+             className="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 active:scale-[0.99] transition-transform cursor-pointer hover:shadow-md"
           >
             <div className="flex justify-between items-start mb-2">
               <div className="flex items-center gap-3">
@@ -120,7 +132,7 @@ export const GlobalDashboard: React.FC<Props> = ({ onNavigate }) => {
           </div>
 
           {/* Card 2 */}
-          <div className="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 active:scale-[0.99] transition-transform">
+          <div className="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 active:scale-[0.99] transition-transform hover:shadow-md">
              <div className="flex justify-between items-start mb-2">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600 dark:text-orange-400 font-bold text-sm">MY</div>
@@ -144,7 +156,7 @@ export const GlobalDashboard: React.FC<Props> = ({ onNavigate }) => {
            {/* Card 3 - Clickable to simulate Region Detail as well */}
            <div 
             onClick={() => onNavigate('REGION_DETAIL')}
-            className="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 active:scale-[0.99] transition-transform cursor-pointer"
+            className="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 active:scale-[0.99] transition-transform cursor-pointer hover:shadow-md"
            >
              <div className="flex justify-between items-start mb-2">
               <div className="flex items-center gap-3">
@@ -170,7 +182,10 @@ export const GlobalDashboard: React.FC<Props> = ({ onNavigate }) => {
       </main>
 
       <div className="fixed bottom-24 right-6 z-30">
-        <button className="bg-primary hover:bg-orange-600 text-white p-4 rounded-full shadow-lg transition-transform hover:scale-105 flex items-center justify-center">
+        <button 
+            onClick={handleDownload}
+            className="bg-primary hover:bg-orange-600 text-white p-4 rounded-full shadow-lg transition-transform hover:scale-105 flex items-center justify-center active:scale-90"
+        >
           <span className="material-icons-round">download</span>
         </button>
       </div>

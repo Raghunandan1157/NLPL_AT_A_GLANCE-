@@ -4,6 +4,7 @@ import { RegionDetail } from './views/RegionDetail';
 import { BranchDetail } from './views/BranchDetail';
 import { RiskAlerts } from './views/RiskAlerts';
 import { StaffPerformance } from './views/StaffPerformance';
+import { Profile } from './views/Profile';
 import { BottomNav } from './components/BottomNav';
 import { ViewState } from './types';
 
@@ -23,6 +24,8 @@ const App: React.FC = () => {
         return <RiskAlerts onBack={() => setCurrentView('GLOBAL_DASHBOARD')} />;
       case 'STAFF_LIST':
         return <StaffPerformance onBack={() => setCurrentView('GLOBAL_DASHBOARD')} />;
+      case 'PROFILE':
+        return <Profile onBack={() => setCurrentView('GLOBAL_DASHBOARD')} />;
       default:
         return <GlobalDashboard onNavigate={setCurrentView} />;
     }

@@ -12,6 +12,8 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet" />
 
     <!-- Tailwind CSS CDN -->
+    <!-- Note: For a production build, installing tailwind via npm/postcss is recommended, 
+         but keeping CDN here preserves existing styling without complex CSS setup. -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -56,14 +58,16 @@
   "imports": {
     "react": "https://esm.sh/react@^19.2.3",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/"
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "vite": "https://esm.sh/vite@^7.3.1"
   }
 }
 </script>
 </head>
   <body class="bg-background-light dark:bg-background-dark text-gray-900 dark:text-gray-100">
     <div id="root"></div>
-    <!-- Entry point moved to end of body -->
+    <!-- Vite entry point -->
     <script type="module" src="./index.tsx"></script>
   </body>
 </html>
