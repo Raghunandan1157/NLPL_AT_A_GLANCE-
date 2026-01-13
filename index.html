@@ -1,19 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Collection Pro</title>
     
-    <!-- Google Fonts & Material Icons -->
+    <!-- Google Fonts & Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet" />
 
-    <!-- Tailwind CSS CDN -->
-    <!-- Note: For a production build, installing tailwind via npm/postcss is recommended, 
-         but keeping CDN here preserves existing styling without complex CSS setup. -->
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -42,32 +43,35 @@
         },
       };
     </script>
-    <style>
-      body {
-        font-family: 'Inter', sans-serif;
-        margin: 0;
-        padding: 0;
-        overflow-x: hidden;
-      }
-      .no-scrollbar::-webkit-scrollbar { display: none; }
-      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
-    </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "vite": "https://esm.sh/vite@^7.3.1",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
-  }
-}
-</script>
 </head>
-  <body class="bg-background-light dark:bg-background-dark text-gray-900 dark:text-gray-100">
-    <div id="root"></div>
-    <!-- Vite entry point -->
-    <script type="module" src="./index.tsx"></script>
-  </body>
+<body class="bg-background-light dark:bg-background-dark text-gray-900 dark:text-gray-100 font-sans selection:bg-primary selection:text-white">
+    
+    <!-- Main Content Area -->
+    <div id="app" class="min-h-screen pb-24 transition-opacity duration-200 opacity-100">
+        <!-- Views will be injected here by script.js -->
+    </div>
+
+    <!-- Bottom Navigation -->
+    <nav class="fixed bottom-0 w-full bg-surface-light dark:bg-surface-dark border-t border-gray-200 dark:border-gray-700 pb-safe pt-2 px-6 flex justify-between items-center z-40 pb-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <button onclick="router.navigate('GLOBAL_DASHBOARD')" class="nav-btn flex flex-col items-center gap-1 transition-colors text-primary" data-view="GLOBAL_DASHBOARD">
+            <span class="material-icons-round text-2xl">analytics</span>
+            <span class="text-[10px] font-medium">Reports</span>
+        </button>
+        <button onclick="router.navigate('STAFF_LIST')" class="nav-btn flex flex-col items-center gap-1 transition-colors text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" data-view="STAFF_LIST">
+            <span class="material-icons-round text-2xl">people</span>
+            <span class="text-[10px] font-medium">Staff</span>
+        </button>
+        <button onclick="router.navigate('RISK_CENTER')" class="nav-btn flex flex-col items-center gap-1 transition-colors text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" data-view="RISK_CENTER">
+            <span class="material-icons-round text-2xl">notifications</span>
+            <span class="text-[10px] font-medium">Alerts</span>
+        </button>
+        <button onclick="router.navigate('PROFILE')" class="nav-btn flex flex-col items-center gap-1 transition-colors text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" data-view="PROFILE">
+            <span class="material-icons-round text-2xl">account_circle</span>
+            <span class="text-[10px] font-medium">Profile</span>
+        </button>
+    </nav>
+
+    <!-- App Logic -->
+    <script src="script.js"></script>
+</body>
 </html>
