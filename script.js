@@ -52,7 +52,7 @@ const Components = {
             purple: { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-600 dark:text-purple-400' },
         };
         const t = themes[theme] || themes.green;
-        
+
         const metricsHtml = metrics ? `
         <div class="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
             ${metrics.map(m => Components.MetricSmall(m.label, m.value, m.trend, m.color)).join('')}
@@ -163,55 +163,51 @@ const Views = {
 
             <div class="space-y-3">
                 ${Components.ListItem({
-                    initials: 'BS',
-                    title: 'Bengaluru South',
-                    subtitle: 'Target: 2.6 Cr',
-                    value: '48.11%',
-                    valueLabel: 'On Date Coll.',
-                    theme: 'green',
-                    onClick: "router.navigate('REGION_DETAIL')",
-                    metrics: [
-                        { label: 'FTOD', value: '1.98%', trend: 'down', color: 'text-red-500' },
-                        { label: '1-30', value: '0.00%', trend: 'neutral', color: 'text-green-500' },
-                        { label: '31-60', value: '1.92%', trend: 'up', color: 'text-green-500' }
-                    ]
-                })}
+            initials: 'BS',
+            title: 'Bengaluru South',
+            subtitle: 'Target: 2.6 Cr',
+            value: '48.11%',
+            valueLabel: 'On Date Coll.',
+            theme: 'green',
+            onClick: "router.navigate('REGION_DETAIL')",
+            metrics: [
+                { label: 'FTOD', value: '1.98%', trend: 'down', color: 'text-red-500' },
+                { label: '1-30', value: '0.00%', trend: 'neutral', color: 'text-green-500' },
+                { label: '31-60', value: '1.92%', trend: 'up', color: 'text-green-500' }
+            ]
+        })}
                 ${Components.ListItem({
-                    initials: 'MY',
-                    title: 'Mysuru Region',
-                    subtitle: 'Target: 1.8 Cr',
-                    value: '34.96%',
-                    valueLabel: 'On Date Coll.',
-                    theme: 'orange',
-                    onClick: "router.navigate('REGION_DETAIL')",
-                    metrics: [
-                        { label: 'FTOD', value: '2.92%', trend: 'up', color: 'text-green-500' },
-                        { label: '1-30', value: '5.26%', trend: 'up', color: 'text-green-500' },
-                        { label: '31-60', value: '1.33%', trend: 'up', color: 'text-green-500' }
-                    ]
-                })}
+            initials: 'MY',
+            title: 'Mysuru Region',
+            subtitle: 'Target: 1.8 Cr',
+            value: '34.96%',
+            valueLabel: 'On Date Coll.',
+            theme: 'orange',
+            onClick: "router.navigate('REGION_DETAIL')",
+            metrics: [
+                { label: 'FTOD', value: '2.92%', trend: 'up', color: 'text-green-500' },
+                { label: '1-30', value: '5.26%', trend: 'up', color: 'text-green-500' },
+                { label: '31-60', value: '1.33%', trend: 'up', color: 'text-green-500' }
+            ]
+        })}
                 ${Components.ListItem({
-                    initials: 'HB',
-                    title: 'Hubballi Region',
-                    subtitle: 'Target: 95 L',
-                    value: '21.05%',
-                    valueLabel: 'On Date Coll.',
-                    theme: 'red',
-                    onClick: "router.navigate('REGION_DETAIL')",
-                    metrics: [
-                        { label: 'FTOD', value: '3.47%', trend: 'up', color: 'text-green-500' },
-                        { label: '1-30', value: '3.00%', trend: 'up', color: 'text-green-500' },
-                        { label: '31-60', value: '0.00%', trend: 'down', color: 'text-red-500' }
-                    ]
-                })}
+            initials: 'HB',
+            title: 'Hubballi Region',
+            subtitle: 'Target: 95 L',
+            value: '21.05%',
+            valueLabel: 'On Date Coll.',
+            theme: 'red',
+            onClick: "router.navigate('REGION_DETAIL')",
+            metrics: [
+                { label: 'FTOD', value: '3.47%', trend: 'up', color: 'text-green-500' },
+                { label: '1-30', value: '3.00%', trend: 'up', color: 'text-green-500' },
+                { label: '31-60', value: '0.00%', trend: 'down', color: 'text-red-500' }
+            ]
+        })}
             </div>
         </main>
         
-        <div class="fixed bottom-24 right-6 z-30">
-            <button onclick="alert('Download Started')" class="bg-primary hover:bg-orange-600 text-white p-4 rounded-full shadow-lg transition-transform hover:scale-105 flex items-center justify-center active:scale-90">
-                <span class="material-icons-round">download</span>
-            </button>
-        </div>
+
         `;
     },
 
@@ -249,20 +245,20 @@ const Views = {
 
             <div class="space-y-3">
                  ${Components.ListItem({
-                    initials: 'CK', title: 'Chikkamagaluru', subtitle: 'Target: 264', value: '48.11%', valueLabel: 'On Date Coll.', theme: 'green',
-                    onClick: "router.navigate('BRANCH_DETAIL')",
-                    metrics: [{ label: 'FTOD', value: '1.98%', trend: 'up', color: 'text-green-500' }, { label: '1-30', value: '0.00%', trend: 'neutral', color: 'text-green-500' }, { label: '31-60', value: '1.92%', trend: 'up', color: 'text-green-500' }]
-                })}
+            initials: 'CK', title: 'Chikkamagaluru', subtitle: 'Target: 264', value: '48.11%', valueLabel: 'On Date Coll.', theme: 'green',
+            onClick: "router.navigate('BRANCH_DETAIL')",
+            metrics: [{ label: 'FTOD', value: '1.98%', trend: 'up', color: 'text-green-500' }, { label: '1-30', value: '0.00%', trend: 'neutral', color: 'text-green-500' }, { label: '31-60', value: '1.92%', trend: 'up', color: 'text-green-500' }]
+        })}
                 ${Components.ListItem({
-                    initials: 'TP', title: 'Tiptur', subtitle: 'Target: 532', value: '34.96%', valueLabel: 'On Date Coll.', theme: 'orange',
-                    onClick: "router.navigate('BRANCH_DETAIL')",
-                    metrics: [{ label: 'FTOD', value: '2.92%', trend: 'up', color: 'text-green-500' }, { label: '1-30', value: '5.26%', trend: 'up', color: 'text-green-500' }, { label: '31-60', value: '1.33%', trend: 'up', color: 'text-green-500' }]
-                })}
+            initials: 'TP', title: 'Tiptur', subtitle: 'Target: 532', value: '34.96%', valueLabel: 'On Date Coll.', theme: 'orange',
+            onClick: "router.navigate('BRANCH_DETAIL')",
+            metrics: [{ label: 'FTOD', value: '2.92%', trend: 'up', color: 'text-green-500' }, { label: '1-30', value: '5.26%', trend: 'up', color: 'text-green-500' }, { label: '31-60', value: '1.33%', trend: 'up', color: 'text-green-500' }]
+        })}
                  ${Components.ListItem({
-                    initials: 'VJ', title: 'Vijayapura', subtitle: 'Target: 817', value: '21.05%', valueLabel: 'On Date Coll.', theme: 'red',
-                    onClick: "router.navigate('BRANCH_DETAIL')",
-                    metrics: [{ label: 'FTOD', value: '3.47%', trend: 'up', color: 'text-green-500' }, { label: '1-30', value: '3.00%', trend: 'up', color: 'text-green-500' }, { label: '31-60', value: '0.00%', trend: 'down', color: 'text-red-500' }]
-                })}
+            initials: 'VJ', title: 'Vijayapura', subtitle: 'Target: 817', value: '21.05%', valueLabel: 'On Date Coll.', theme: 'red',
+            onClick: "router.navigate('BRANCH_DETAIL')",
+            metrics: [{ label: 'FTOD', value: '3.47%', trend: 'up', color: 'text-green-500' }, { label: '1-30', value: '3.00%', trend: 'up', color: 'text-green-500' }, { label: '31-60', value: '0.00%', trend: 'down', color: 'text-red-500' }]
+        })}
             </div>
         </main>`;
     },
@@ -297,7 +293,7 @@ const Views = {
     },
 
     STAFF_LIST: () => {
-         const allStaff = [
+        const allStaff = [
             { rank: 1, name: "Rajesh Kumar", region: "Tumkur Region", score: "92.4%", theme: "green", avatarUrl: "https://picsum.photos/100/100?random=1", metrics: [{ l: 'FTOD', v: '4.8%' }, { l: '1-30', v: '2.1%' }, { l: '31-60', v: '1.2%' }] },
             { rank: 2, name: "Anjali Singh", region: "Kolar District", score: "88.1%", theme: "green", avatarUrl: "https://picsum.photos/100/100?random=2", metrics: [{ l: 'FTOD', v: '3.9%' }, { l: '1-30', v: '1.8%' }, { l: '31-60', v: '0.9%' }] },
             { rank: 3, name: "Priya Sharma", region: "Tiptur Zone", score: "76.5%", theme: "orange", avatarUrl: "https://picsum.photos/100/100?random=3", metrics: [{ l: 'FTOD', v: '2.5%' }, { l: '1-30', v: '4.1%' }, { l: '31-60', v: '1.1%' }] },
@@ -329,10 +325,10 @@ const Views = {
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex items-center gap-3">
                             <div class="relative">
-                                ${staff.avatarUrl ? 
-                                    `<img class="w-12 h-12 rounded-full object-cover border-2 border-white dark:border-gray-800 shadow-sm" src="${staff.avatarUrl}" alt="${staff.name}"/>` : 
-                                    `<div class="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-lg border-2 border-white dark:border-gray-800 shadow-sm">${staff.initials}</div>`
-                                }
+                                ${staff.avatarUrl ?
+                `<img class="w-12 h-12 rounded-full object-cover border-2 border-white dark:border-gray-800 shadow-sm" src="${staff.avatarUrl}" alt="${staff.name}"/>` :
+                `<div class="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-lg border-2 border-white dark:border-gray-800 shadow-sm">${staff.initials}</div>`
+            }
                                 <div class="absolute -bottom-1 -right-1 w-5 h-5 bg-gray-700 rounded-full flex items-center justify-center text-[10px] font-bold text-white border-2 border-white dark:border-gray-800 shadow-sm">${staff.rank}</div>
                             </div>
                             <div>
@@ -507,7 +503,7 @@ const actions = {
         render();
         // Restore focus to input after render
         const input = document.querySelector('input');
-        if(input) {
+        if (input) {
             input.focus();
             input.value = term; // Ensure cursor doesn't jump weirdly
         }
@@ -517,7 +513,7 @@ const actions = {
 function render() {
     const app = document.getElementById('app');
     const viewFn = Views[state.currentView];
-    
+
     if (viewFn) {
         app.innerHTML = viewFn();
     } else {
@@ -528,7 +524,7 @@ function render() {
     document.querySelectorAll('.nav-btn').forEach(btn => {
         const view = btn.getAttribute('data-view');
         const isActive = view === state.currentView;
-        
+
         if (isActive) {
             btn.classList.add('text-primary');
             btn.classList.remove('text-gray-400');
