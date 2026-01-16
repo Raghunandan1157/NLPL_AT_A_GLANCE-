@@ -1,18 +1,365 @@
 /**
- * Collection Pro - Vanilla JS Implementation
+ * Collection Pro - Vanilla JS Implementation with Supabase Integration
  */
+
+// --- Supabase Client ---
+const supabase = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
 
 // --- State Management ---
 const state = {
     currentView: 'GLOBAL_DASHBOARD',
     activeTab: 'IGL', // IGL, FIG, IL
     searchTerm: '',
-    darkMode: false
+    darkMode: false,
+    selectedRegion: null,
+    selectedBranch: null,
+    // Date filter
+    dateFilter: {
+        selectedDates: [new Date()], // Array for multiple date selection
+        showPicker: false
+    },
+    // Data from Supabase
+    data: {
+        summary: null,
+        regions: [],
+        branches: [],
+        staff: [],
+        loading: true,
+        lastUpdated: null
+    }
 };
 
-// --- Component Generators ---
+// --- Date Utilities ---
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const DateUtils = {
+    format: (date) => {
+        return `${MONTHS[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+    },
+    formatShort: (date) => {
+        return `${date.getDate()} ${MONTHS[date.getMonth()]}`;
+    },
+    toDBFormat: (date) => {
+        return {
+            date: date.getDate(),
+            month: MONTHS[date.getMonth()].toUpperCase(),
+            year: date.getFullYear()
+        };
+    },
+    addDays: (date, days) => {
+        const result = new Date(date);
+        result.setDate(result.getDate() + days);
+        return result;
+    },
+    isSameDay: (d1, d2) => {
+        return d1.getDate() === d2.getDate() &&
+            d1.getMonth() === d2.getMonth() &&
+            d1.getFullYear() === d2.getFullYear();
+    }
+};
+
+// --- Data Fetching ---
+
+const DataService = {
+    // Format currency in lakhs/crore
+    formatCurrency: (amount) => {
+        if (amount >= 10000000) {
+            return `₹ ${(amount / 10000000).toFixed(1)} Cr`;
+        } else if (amount >= 100000) {
+            return `₹ ${(amount / 100000).toFixed(1)} L`;
+        } else {
+            return `₹ ${amount.toLocaleString()}`;
+        }
+    },
+
+    // Calculate percentage
+    calcPercentage: (achieved, total) => {
+        if (!total || total === 0) return 0;
+        return ((achieved / total) * 100).toFixed(2);
+    },
+
+    // Fetch summary data grouped by region
+    async fetchDashboardData() {
+        state.data.loading = true;
+        render();
+
+        try {
+            // Build date filter query
+            let query = supabase
+                .from('master_data')
+                .select('region_name, total_demand_amount, achievement_amount, dpd_group_present, date, month, year')
+                .not('region_name', 'is', null);
+
+            // Apply date filter if dates selected
+            if (state.dateFilter.selectedDates.length > 0) {
+                const dateConditions = state.dateFilter.selectedDates.map(d => {
+                    const dbDate = DateUtils.toDBFormat(d);
+                    return `and(date.eq.${dbDate.date},month.eq.${dbDate.month},year.eq.${dbDate.year})`;
+                });
+                query = query.or(dateConditions.join(','));
+            }
+
+            const { data: regionData, error } = await query;
+
+            if (error) throw error;
+
+            // Aggregate by region
+            const regionsMap = {};
+            regionData.forEach(row => {
+                const region = row.region_name;
+                if (!regionsMap[region]) {
+                    regionsMap[region] = {
+                        name: region,
+                        totalDemand: 0,
+                        achievement: 0,
+                        dpdCounts: { FTOD: 0, '1-30': 0, '31-60': 0, 'PNPA': 0, total: 0 }
+                    };
+                }
+                regionsMap[region].totalDemand += parseFloat(row.total_demand_amount) || 0;
+                regionsMap[region].achievement += parseFloat(row.achievement_amount) || 0;
+                regionsMap[region].dpdCounts.total++;
+
+                const dpd = row.dpd_group_present;
+                if (dpd === 'FTOD' || dpd === '0') regionsMap[region].dpdCounts.FTOD++;
+                else if (dpd === '1-30') regionsMap[region].dpdCounts['1-30']++;
+                else if (dpd === '31-60') regionsMap[region].dpdCounts['31-60']++;
+                else if (dpd === 'PNPA' || dpd === '61-90') regionsMap[region].dpdCounts.PNPA++;
+            });
+
+            // Convert to array and calculate percentages
+            state.data.regions = Object.values(regionsMap).map(r => ({
+                name: r.name,
+                initials: r.name.substring(0, 2).toUpperCase(),
+                totalDemand: r.totalDemand,
+                achievement: r.achievement,
+                percentage: this.calcPercentage(r.achievement, r.totalDemand),
+                ftod: this.calcPercentage(r.dpdCounts.FTOD, r.dpdCounts.total),
+                dpd1_30: this.calcPercentage(r.dpdCounts['1-30'], r.dpdCounts.total),
+                dpd31_60: this.calcPercentage(r.dpdCounts['31-60'], r.dpdCounts.total),
+                pnpa: this.calcPercentage(r.dpdCounts.PNPA, r.dpdCounts.total)
+            })).sort((a, b) => parseFloat(b.percentage) - parseFloat(a.percentage));
+
+            // Calculate overall summary
+            const totalDemand = Object.values(regionsMap).reduce((sum, r) => sum + r.totalDemand, 0);
+            const totalAchievement = Object.values(regionsMap).reduce((sum, r) => sum + r.achievement, 0);
+            const totalDpdCounts = Object.values(regionsMap).reduce((acc, r) => {
+                acc.FTOD += r.dpdCounts.FTOD;
+                acc['1-30'] += r.dpdCounts['1-30'];
+                acc['31-60'] += r.dpdCounts['31-60'];
+                acc.PNPA += r.dpdCounts.PNPA;
+                acc.total += r.dpdCounts.total;
+                return acc;
+            }, { FTOD: 0, '1-30': 0, '31-60': 0, PNPA: 0, total: 0 });
+
+            state.data.summary = {
+                totalDemand,
+                totalAchievement,
+                percentage: this.calcPercentage(totalAchievement, totalDemand),
+                ftod: this.calcPercentage(totalDpdCounts.FTOD, totalDpdCounts.total),
+                dpd1_30: this.calcPercentage(totalDpdCounts['1-30'], totalDpdCounts.total),
+                dpd31_60: this.calcPercentage(totalDpdCounts['31-60'], totalDpdCounts.total),
+                pnpa: this.calcPercentage(totalDpdCounts.PNPA, totalDpdCounts.total)
+            };
+
+            state.data.lastUpdated = new Date().toLocaleDateString('en-IN');
+            state.data.loading = false;
+
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            state.data.loading = false;
+        }
+
+        render();
+    },
+
+    // Fetch branches for a specific region
+    async fetchBranchData(regionName) {
+        try {
+            const { data: branchData, error } = await supabase
+                .from('master_data')
+                .select('branch_name, branch_code, total_demand_amount, achievement_amount, dpd_group_present')
+                .eq('region_name', regionName);
+
+            if (error) throw error;
+
+            const branchesMap = {};
+            branchData.forEach(row => {
+                const branch = row.branch_name || row.branch_code;
+                if (!branch) return;
+                if (!branchesMap[branch]) {
+                    branchesMap[branch] = {
+                        name: branch,
+                        code: row.branch_code,
+                        totalDemand: 0,
+                        achievement: 0,
+                        dpdCounts: { FTOD: 0, '1-30': 0, '31-60': 0, total: 0 }
+                    };
+                }
+                branchesMap[branch].totalDemand += parseFloat(row.total_demand_amount) || 0;
+                branchesMap[branch].achievement += parseFloat(row.achievement_amount) || 0;
+                branchesMap[branch].dpdCounts.total++;
+
+                const dpd = row.dpd_group_present;
+                if (dpd === 'FTOD' || dpd === '0') branchesMap[branch].dpdCounts.FTOD++;
+                else if (dpd === '1-30') branchesMap[branch].dpdCounts['1-30']++;
+                else if (dpd === '31-60') branchesMap[branch].dpdCounts['31-60']++;
+            });
+
+            state.data.branches = Object.values(branchesMap).map(b => ({
+                name: b.name,
+                code: b.code,
+                initials: b.name.substring(0, 2).toUpperCase(),
+                totalDemand: b.totalDemand,
+                achievement: b.achievement,
+                percentage: this.calcPercentage(b.achievement, b.totalDemand),
+                ftod: this.calcPercentage(b.dpdCounts.FTOD, b.dpdCounts.total),
+                dpd1_30: this.calcPercentage(b.dpdCounts['1-30'], b.dpdCounts.total),
+                dpd31_60: this.calcPercentage(b.dpdCounts['31-60'], b.dpdCounts.total)
+            })).sort((a, b) => parseFloat(b.percentage) - parseFloat(a.percentage));
+
+        } catch (error) {
+            console.error('Error fetching branch data:', error);
+        }
+
+        render();
+    },
+
+    // Fetch staff data for a specific branch
+    async fetchStaffData(branchName) {
+        try {
+            const { data: staffData, error } = await supabase
+                .from('master_data')
+                .select('employee_id, employee_name, total_demand_amount, achievement_amount, dpd_group_present')
+                .eq('branch_name', branchName);
+
+            if (error) throw error;
+
+            const staffMap = {};
+            staffData.forEach(row => {
+                const empId = row.employee_id;
+                if (!empId) return;
+                if (!staffMap[empId]) {
+                    staffMap[empId] = {
+                        id: empId,
+                        name: row.employee_name || `Employee ${empId}`,
+                        totalDemand: 0,
+                        achievement: 0,
+                        dpdCounts: { FTOD: 0, '1-30': 0, '31-60': 0, total: 0 }
+                    };
+                }
+                staffMap[empId].totalDemand += parseFloat(row.total_demand_amount) || 0;
+                staffMap[empId].achievement += parseFloat(row.achievement_amount) || 0;
+                staffMap[empId].dpdCounts.total++;
+
+                const dpd = row.dpd_group_present;
+                if (dpd === 'FTOD' || dpd === '0') staffMap[empId].dpdCounts.FTOD++;
+                else if (dpd === '1-30') staffMap[empId].dpdCounts['1-30']++;
+                else if (dpd === '31-60') staffMap[empId].dpdCounts['31-60']++;
+            });
+
+            state.data.staff = Object.values(staffMap).map((s, idx) => ({
+                rank: idx + 1,
+                id: s.id,
+                name: s.name,
+                initials: s.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase(),
+                totalDemand: s.totalDemand,
+                achievement: s.achievement,
+                score: this.calcPercentage(s.achievement, s.totalDemand),
+                ftod: this.calcPercentage(s.dpdCounts.FTOD, s.dpdCounts.total),
+                dpd1_30: this.calcPercentage(s.dpdCounts['1-30'], s.dpdCounts.total),
+                dpd31_60: this.calcPercentage(s.dpdCounts['31-60'], s.dpdCounts.total)
+            })).sort((a, b) => parseFloat(b.score) - parseFloat(a.score));
+
+            // Update ranks after sorting
+            state.data.staff.forEach((s, idx) => s.rank = idx + 1);
+
+        } catch (error) {
+            console.error('Error fetching staff data:', error);
+        }
+
+        render();
+    }
+};
 
 const Components = {
+    LoadingSpinner: () => `
+        <div class="flex items-center justify-center py-12">
+            <div class="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+        </div>
+    `,
+
+    DatePicker: () => {
+        const dates = state.dateFilter.selectedDates;
+        const displayText = dates.length === 1
+            ? DateUtils.format(dates[0])
+            : dates.length > 1
+                ? `${DateUtils.formatShort(dates[0])} - ${DateUtils.formatShort(dates[dates.length - 1])}`
+                : 'Select Date';
+
+        return `
+        <div class="flex items-center justify-center gap-3 py-3">
+            <button onclick="actions.prevDate()" class="w-10 h-10 flex items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-surface-light dark:bg-surface-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                <span class="material-icons-round text-gray-500 dark:text-gray-400">chevron_left</span>
+            </button>
+            <button onclick="actions.toggleDatePicker()" class="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-surface-light dark:bg-surface-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors min-w-[180px] justify-center">
+                <span class="material-icons-round text-gray-500 dark:text-gray-400 text-lg">calendar_today</span>
+                <span class="font-semibold text-sm text-gray-800 dark:text-gray-200">${displayText}</span>
+                <span class="material-icons-round text-gray-400 text-sm">expand_more</span>
+            </button>
+            <button onclick="actions.nextDate()" class="w-10 h-10 flex items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-surface-light dark:bg-surface-dark hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                <span class="material-icons-round text-gray-500 dark:text-gray-400">chevron_right</span>
+            </button>
+        </div>
+        ${state.dateFilter.showPicker ? Components.DatePickerModal() : ''}
+        `;
+    },
+
+    DatePickerModal: () => {
+        const today = new Date();
+        const selectedDates = state.dateFilter.selectedDates;
+
+        // Generate last 7 days for quick select
+        const quickDates = [];
+        for (let i = 0; i < 7; i++) {
+            quickDates.push(DateUtils.addDays(today, -i));
+        }
+
+        return `
+        <div class="fixed inset-0 bg-black/50 z-50 flex items-end justify-center" onclick="actions.closeDatePicker(event)">
+            <div class="bg-surface-light dark:bg-surface-dark rounded-t-3xl w-full max-w-md p-6 animate-slide-up" onclick="event.stopPropagation()">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white">Select Date(s)</h3>
+                    <button onclick="actions.closeDatePicker()" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <span class="material-icons-round text-gray-500">close</span>
+                    </button>
+                </div>
+                <p class="text-xs text-gray-500 mb-4">Tap to select/deselect dates</p>
+                <div class="grid grid-cols-4 gap-2 mb-4">
+                    ${quickDates.map(d => {
+            const isSelected = selectedDates.some(sd => DateUtils.isSameDay(sd, d));
+            return `
+                        <button onclick="actions.toggleDateSelection('${d.toISOString()}')" 
+                            class="p-3 rounded-xl text-center transition-all ${isSelected
+                    ? 'bg-primary text-white'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}">
+                            <p class="text-xs font-medium">${MONTHS[d.getMonth()]}</p>
+                            <p class="text-lg font-bold">${d.getDate()}</p>
+                        </button>`;
+        }).join('')}
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="actions.selectToday()" class="flex-1 py-3 px-4 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                        Today
+                    </button>
+                    <button onclick="actions.applyDateFilter()" class="flex-1 py-3 px-4 rounded-xl bg-primary text-white font-medium text-sm hover:bg-primary/90 transition-colors">
+                        Apply Filter
+                    </button>
+                </div>
+            </div>
+        </div>
+        `;
+    },
+
     DonutChart: (percentage, size = 56, colorClass = "text-primary", label = null) => {
         const strokeWidth = 4;
         const radius = (size - strokeWidth) / 2;
@@ -38,7 +385,7 @@ const Components = {
             <p class="text-[10px] text-gray-500">${label}</p>
             <div class="flex items-center justify-center gap-1 ${color}">
                 <span class="material-icons-round text-[10px]">${icon}</span>
-                <span class="text-xs font-bold">${value}</span>
+                <span class="text-xs font-bold">${value}%</span>
             </div>
         </div>`;
     },
@@ -75,7 +422,40 @@ const Components = {
             </div>
             ${metricsHtml}
         </div>`;
-    }
+    },
+
+    EmptyState: (message) => `
+        <div class="text-center py-12">
+            <span class="material-icons-round text-5xl text-gray-300 dark:text-gray-600 mb-4">inbox</span>
+            <p class="text-gray-500 dark:text-gray-400">${message}</p>
+            <button onclick="DataService.fetchDashboardData()" class="mt-4 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90">
+                Refresh Data
+            </button>
+        </div>
+    `
+};
+
+// --- Helper Functions ---
+
+const getThemeByPercentage = (pct) => {
+    const p = parseFloat(pct);
+    if (p >= 70) return 'green';
+    if (p >= 40) return 'orange';
+    return 'red';
+};
+
+const getTrend = (value) => {
+    const v = parseFloat(value);
+    if (v <= 2) return 'up';
+    if (v >= 5) return 'down';
+    return 'neutral';
+};
+
+const getTrendColor = (value) => {
+    const v = parseFloat(value);
+    if (v <= 2) return 'text-green-500';
+    if (v >= 5) return 'text-red-500';
+    return 'text-orange-500';
 };
 
 // --- Views ---
@@ -83,7 +463,38 @@ const Components = {
 const Views = {
     GLOBAL_DASHBOARD: () => {
         const tabs = ['IGL', 'FIG', 'IL'];
-        const percentage = state.activeTab === 'IGL' ? 34 : state.activeTab === 'FIG' ? 62 : 45;
+        const summary = state.data.summary;
+        const regions = state.data.regions;
+
+        if (state.data.loading) {
+            return `
+            <header class="sticky top-0 z-20 bg-surface-light dark:bg-surface-dark shadow-sm px-4 pt-12 pb-4 view-animate">
+                <div class="flex items-center justify-between">
+                    <button class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300">
+                        <span class="material-icons-round text-2xl">menu</span>
+                    </button>
+                    <h1 class="text-lg font-bold text-center flex-1 pr-10">Collection Pro</h1>
+                </div>
+            </header>
+            <main class="p-4">
+                ${Components.LoadingSpinner()}
+            </main>`;
+        }
+
+        if (!summary || regions.length === 0) {
+            return `
+            <header class="sticky top-0 z-20 bg-surface-light dark:bg-surface-dark shadow-sm px-4 pt-12 pb-4 view-animate">
+                <div class="flex items-center justify-between">
+                    <button class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300">
+                        <span class="material-icons-round text-2xl">menu</span>
+                    </button>
+                    <h1 class="text-lg font-bold text-center flex-1 pr-10">Collection Pro</h1>
+                </div>
+            </header>
+            <main class="p-4">
+                ${Components.EmptyState('No data available. Upload data using the Data Uploader.')}
+            </main>`;
+        }
 
         return `
         <header class="sticky top-0 z-20 bg-surface-light dark:bg-surface-dark shadow-sm px-4 pt-12 pb-4 view-animate">
@@ -93,10 +504,11 @@ const Views = {
                 </button>
                 <h1 class="text-lg font-bold text-center flex-1 pr-10">Collection Pro</h1>
             </div>
-            <div class="mt-2 text-center">
-                <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">Global Report • Updated: 13-01-2026</p>
-            </div>
-            <div class="flex items-center justify-between mt-6 bg-gray-100 dark:bg-gray-900 p-1 rounded-xl">
+            
+            <!-- Date Picker -->
+            ${Components.DatePicker()}
+            
+            <div class="flex items-center justify-between mt-2 bg-gray-100 dark:bg-gray-900 p-1 rounded-xl">
                 ${tabs.map(tab => `
                     <button onclick="actions.setTab('${tab}')" 
                         class="flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${state.activeTab === tab ? 'bg-surface-light dark:bg-surface-dark shadow-sm text-primary' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}">
@@ -112,9 +524,9 @@ const Views = {
                 <div class="flex justify-between items-start mb-4">
                     <div>
                         <h2 class="text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wider">Overall Performance (${state.activeTab})</h2>
-                        <p class="text-2xl font-bold mt-1">₹ 4.2 Cr <span class="text-sm font-normal text-gray-500 dark:text-gray-400">/ 12.5 Cr</span></p>
+                        <p class="text-2xl font-bold mt-1">${DataService.formatCurrency(summary.totalAchievement)} <span class="text-sm font-normal text-gray-500 dark:text-gray-400">/ ${DataService.formatCurrency(summary.totalDemand)}</span></p>
                     </div>
-                    ${Components.DonutChart(percentage)}
+                    ${Components.DonutChart(parseFloat(summary.percentage))}
                 </div>
                 
                 <div class="grid grid-cols-2 gap-4 mt-2">
@@ -123,16 +535,14 @@ const Views = {
                             <span class="material-icons-round text-red-500 text-sm">trending_down</span>
                             <p class="text-xs font-medium text-red-600 dark:text-red-400">FTOD</p>
                         </div>
-                        <p class="text-lg font-bold text-gray-900 dark:text-white">3.77%</p>
-                        <p class="text-[10px] text-gray-500 dark:text-gray-400">Bal: 86.1 L</p>
+                        <p class="text-lg font-bold text-gray-900 dark:text-white">${summary.ftod}%</p>
                     </div>
                     <div class="bg-green-50 dark:bg-green-900/20 p-3 rounded-xl border border-green-100 dark:border-green-800/30">
                         <div class="flex items-center gap-2 mb-1">
                             <span class="material-icons-round text-green-500 text-sm">trending_up</span>
                             <p class="text-xs font-medium text-green-600 dark:text-green-400">1-30 DPD</p>
                         </div>
-                        <p class="text-lg font-bold text-gray-900 dark:text-white">2.18%</p>
-                        <p class="text-[10px] text-gray-500 dark:text-gray-400">Bal: 10.3 L</p>
+                        <p class="text-lg font-bold text-gray-900 dark:text-white">${summary.dpd1_30}%</p>
                     </div>
                 </div>
 
@@ -141,13 +551,11 @@ const Views = {
                     <div class="flex gap-3 overflow-x-auto no-scrollbar pb-1">
                          <div class="flex-none w-28 bg-gray-50 dark:bg-gray-800 p-3 rounded-xl">
                             <p class="text-[10px] text-gray-500 dark:text-gray-400 uppercase">31-60 DPD</p>
-                            <p class="text-sm font-bold mt-1 text-red-500">0.92%</p>
-                            <p class="text-[10px] text-gray-400 mt-1">Bal: 19.4 L</p>
+                            <p class="text-sm font-bold mt-1 text-red-500">${summary.dpd31_60}%</p>
                         </div>
                         <div class="flex-none w-28 bg-gray-50 dark:bg-gray-800 p-3 rounded-xl">
                             <p class="text-[10px] text-gray-500 dark:text-gray-400 uppercase">PNPA</p>
-                            <p class="text-sm font-bold mt-1 text-orange-500">0.39%</p>
-                            <p class="text-[10px] text-gray-400 mt-1">Bal: 17.9 L</p>
+                            <p class="text-sm font-bold mt-1 text-orange-500">${summary.pnpa}%</p>
                         </div>
                     </div>
                 </div>
@@ -156,74 +564,43 @@ const Views = {
             <!-- Top Regions -->
             <div class="flex items-center justify-between px-1">
                 <h3 class="text-base font-bold text-gray-900 dark:text-white">Top Performing Regions</h3>
-                <button class="text-primary text-sm font-medium flex items-center gap-1">
-                    Filter <span class="material-icons-round text-base">filter_list</span>
+                <button onclick="DataService.fetchDashboardData()" class="text-primary text-sm font-medium flex items-center gap-1">
+                    Refresh <span class="material-icons-round text-base">refresh</span>
                 </button>
             </div>
 
             <div class="space-y-3">
-                ${Components.ListItem({
-            initials: 'BS',
-            title: 'Bengaluru South',
-            subtitle: 'Target: 2.6 Cr',
-            value: '48.11%',
-            valueLabel: 'On Date Coll.',
-            theme: 'green',
-            onClick: "router.navigate('REGION_DETAIL')",
+                ${regions.slice(0, 10).map(region => Components.ListItem({
+            initials: region.initials,
+            title: region.name,
+            subtitle: `Target: ${DataService.formatCurrency(region.totalDemand)}`,
+            value: `${region.percentage}%`,
+            valueLabel: 'Collection',
+            theme: getThemeByPercentage(region.percentage),
+            onClick: `actions.selectRegion('${region.name.replace(/'/g, "\\'")}')`,
             metrics: [
-                { label: 'FTOD', value: '1.98%', trend: 'down', color: 'text-red-500' },
-                { label: '1-30', value: '0.00%', trend: 'neutral', color: 'text-green-500' },
-                { label: '31-60', value: '1.92%', trend: 'up', color: 'text-green-500' }
+                { label: 'FTOD', value: region.ftod, trend: getTrend(region.ftod), color: getTrendColor(region.ftod) },
+                { label: '1-30', value: region.dpd1_30, trend: getTrend(region.dpd1_30), color: getTrendColor(region.dpd1_30) },
+                { label: '31-60', value: region.dpd31_60, trend: getTrend(region.dpd31_60), color: getTrendColor(region.dpd31_60) }
             ]
-        })}
-                ${Components.ListItem({
-            initials: 'MY',
-            title: 'Mysuru Region',
-            subtitle: 'Target: 1.8 Cr',
-            value: '34.96%',
-            valueLabel: 'On Date Coll.',
-            theme: 'orange',
-            onClick: "router.navigate('REGION_DETAIL')",
-            metrics: [
-                { label: 'FTOD', value: '2.92%', trend: 'up', color: 'text-green-500' },
-                { label: '1-30', value: '5.26%', trend: 'up', color: 'text-green-500' },
-                { label: '31-60', value: '1.33%', trend: 'up', color: 'text-green-500' }
-            ]
-        })}
-                ${Components.ListItem({
-            initials: 'HB',
-            title: 'Hubballi Region',
-            subtitle: 'Target: 95 L',
-            value: '21.05%',
-            valueLabel: 'On Date Coll.',
-            theme: 'red',
-            onClick: "router.navigate('REGION_DETAIL')",
-            metrics: [
-                { label: 'FTOD', value: '3.47%', trend: 'up', color: 'text-green-500' },
-                { label: '1-30', value: '3.00%', trend: 'up', color: 'text-green-500' },
-                { label: '31-60', value: '0.00%', trend: 'down', color: 'text-red-500' }
-            ]
-        })}
+        })).join('')}
             </div>
         </main>
-        
-
         `;
     },
 
     REGION_DETAIL: () => {
+        const regionName = state.selectedRegion;
+        const branches = state.data.branches;
+        const regionData = state.data.regions.find(r => r.name === regionName) || {};
+
         return `
         <header class="sticky top-0 z-20 bg-surface-light dark:bg-surface-dark shadow-sm px-4 pt-12 pb-4 view-animate">
             <div class="flex items-center justify-between">
                 <button onclick="router.navigate('GLOBAL_DASHBOARD')" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300">
                     <span class="material-icons-round text-2xl">arrow_back</span>
                 </button>
-                <h1 class="text-lg font-bold text-center flex-1 pr-10">Tumkur Region</h1>
-            </div>
-            <div class="flex items-center justify-between mt-6 bg-gray-100 dark:bg-gray-900 p-1 rounded-xl">
-                <button class="flex-1 py-2 text-sm font-semibold rounded-lg bg-surface-light dark:bg-surface-dark shadow-sm text-primary">IGL</button>
-                <button class="flex-1 py-2 text-sm font-medium text-gray-500 dark:text-gray-400">FIG</button>
-                <button class="flex-1 py-2 text-sm font-medium text-gray-500 dark:text-gray-400">IL</button>
+                <h1 class="text-lg font-bold text-center flex-1 pr-10">${regionName}</h1>
             </div>
         </header>
 
@@ -231,46 +608,48 @@ const Views = {
             <section class="bg-surface-light dark:bg-surface-dark rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
                 <div class="flex justify-between items-start mb-4">
                     <div>
-                        <h2 class="text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wider">Overall Performance</h2>
-                        <p class="text-2xl font-bold mt-1">₹ 4,096 <span class="text-sm font-normal text-gray-500 dark:text-gray-400">/ 12,057 Demand</span></p>
+                        <h2 class="text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wider">Region Performance</h2>
+                        <p class="text-2xl font-bold mt-1">${DataService.formatCurrency(regionData.achievement || 0)} <span class="text-sm font-normal text-gray-500 dark:text-gray-400">/ ${DataService.formatCurrency(regionData.totalDemand || 0)}</span></p>
                     </div>
-                    ${Components.DonutChart(34)}
+                    ${Components.DonutChart(parseFloat(regionData.percentage || 0))}
                 </div>
             </section>
 
             <div class="flex items-center justify-between px-1">
-                <h3 class="text-base font-bold text-gray-900 dark:text-white">District Breakdown</h3>
-                <button class="text-primary text-sm font-medium flex items-center gap-1">Filter <span class="material-icons-round text-base">filter_list</span></button>
+                <h3 class="text-base font-bold text-gray-900 dark:text-white">Branch Breakdown</h3>
             </div>
 
             <div class="space-y-3">
-                 ${Components.ListItem({
-            initials: 'CK', title: 'Chikkamagaluru', subtitle: 'Target: 264', value: '48.11%', valueLabel: 'On Date Coll.', theme: 'green',
-            onClick: "router.navigate('BRANCH_DETAIL')",
-            metrics: [{ label: 'FTOD', value: '1.98%', trend: 'up', color: 'text-green-500' }, { label: '1-30', value: '0.00%', trend: 'neutral', color: 'text-green-500' }, { label: '31-60', value: '1.92%', trend: 'up', color: 'text-green-500' }]
-        })}
-                ${Components.ListItem({
-            initials: 'TP', title: 'Tiptur', subtitle: 'Target: 532', value: '34.96%', valueLabel: 'On Date Coll.', theme: 'orange',
-            onClick: "router.navigate('BRANCH_DETAIL')",
-            metrics: [{ label: 'FTOD', value: '2.92%', trend: 'up', color: 'text-green-500' }, { label: '1-30', value: '5.26%', trend: 'up', color: 'text-green-500' }, { label: '31-60', value: '1.33%', trend: 'up', color: 'text-green-500' }]
-        })}
-                 ${Components.ListItem({
-            initials: 'VJ', title: 'Vijayapura', subtitle: 'Target: 817', value: '21.05%', valueLabel: 'On Date Coll.', theme: 'red',
-            onClick: "router.navigate('BRANCH_DETAIL')",
-            metrics: [{ label: 'FTOD', value: '3.47%', trend: 'up', color: 'text-green-500' }, { label: '1-30', value: '3.00%', trend: 'up', color: 'text-green-500' }, { label: '31-60', value: '0.00%', trend: 'down', color: 'text-red-500' }]
-        })}
+                ${branches.length === 0 ? Components.EmptyState('No branch data available') : branches.map(branch => Components.ListItem({
+            initials: branch.initials,
+            title: branch.name,
+            subtitle: `Target: ${DataService.formatCurrency(branch.totalDemand)}`,
+            value: `${branch.percentage}%`,
+            valueLabel: 'Collection',
+            theme: getThemeByPercentage(branch.percentage),
+            onClick: `actions.selectBranch('${branch.name.replace(/'/g, "\\'")}')`,
+            metrics: [
+                { label: 'FTOD', value: branch.ftod, trend: getTrend(branch.ftod), color: getTrendColor(branch.ftod) },
+                { label: '1-30', value: branch.dpd1_30, trend: getTrend(branch.dpd1_30), color: getTrendColor(branch.dpd1_30) },
+                { label: '31-60', value: branch.dpd31_60, trend: getTrend(branch.dpd31_60), color: getTrendColor(branch.dpd31_60) }
+            ]
+        })).join('')}
             </div>
         </main>`;
     },
 
     BRANCH_DETAIL: () => {
+        const branchName = state.selectedBranch;
+        const staff = state.data.staff;
+        const branchData = state.data.branches.find(b => b.name === branchName) || {};
+
         return `
         <header class="sticky top-0 z-20 bg-surface-light dark:bg-surface-dark shadow-sm px-4 pt-12 pb-4 view-animate">
             <div class="flex items-center justify-between">
                 <button onclick="router.navigate('REGION_DETAIL')" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300">
                     <span class="material-icons-round text-2xl">arrow_back</span>
                 </button>
-                <h1 class="text-lg font-bold text-center flex-1 pr-10">Marikal Branch</h1>
+                <h1 class="text-lg font-bold text-center flex-1 pr-10">${branchName}</h1>
             </div>
         </header>
         
@@ -279,28 +658,37 @@ const Views = {
                 <div class="flex justify-between items-start mb-4">
                     <div>
                     <h2 class="text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wider">Branch Performance</h2>
-                    <p class="text-2xl font-bold mt-1">₹ 2,140 <span class="text-sm font-normal text-gray-500 dark:text-gray-400">/ 5,800 Demand</span></p>
+                    <p class="text-2xl font-bold mt-1">${DataService.formatCurrency(branchData.achievement || 0)} <span class="text-sm font-normal text-gray-500 dark:text-gray-400">/ ${DataService.formatCurrency(branchData.totalDemand || 0)}</span></p>
                     </div>
-                    ${Components.DonutChart(36)}
+                    ${Components.DonutChart(parseFloat(branchData.percentage || 0))}
                 </div>
             </section>
 
+            <div class="flex items-center justify-between px-1">
+                <h3 class="text-base font-bold text-gray-900 dark:text-white">Staff Performance</h3>
+            </div>
+
             <div class="space-y-3">
-                ${Components.ListItem({ initials: 'RK', title: 'Ramesh Kumar', subtitle: 'Target: 1,240', value: '92.45%', valueLabel: 'Collection', theme: 'blue', onClick: '', metrics: null })}
-                ${Components.ListItem({ initials: 'SD', title: 'Sita Devi', subtitle: 'Target: 980', value: '64.10%', valueLabel: 'Collection', theme: 'purple', onClick: '', metrics: null })}
+                ${staff.length === 0 ? Components.EmptyState('No staff data available') : staff.map(s => Components.ListItem({
+            initials: s.initials,
+            title: s.name,
+            subtitle: `Target: ${DataService.formatCurrency(s.totalDemand)}`,
+            value: `${s.score}%`,
+            valueLabel: 'Score',
+            theme: getThemeByPercentage(s.score),
+            onClick: '',
+            metrics: [
+                { label: 'FTOD', value: s.ftod, trend: getTrend(s.ftod), color: getTrendColor(s.ftod) },
+                { label: '1-30', value: s.dpd1_30, trend: getTrend(s.dpd1_30), color: getTrendColor(s.dpd1_30) },
+                { label: '31-60', value: s.dpd31_60, trend: getTrend(s.dpd31_60), color: getTrendColor(s.dpd31_60) }
+            ]
+        })).join('')}
             </div>
         </main>`;
     },
 
     STAFF_LIST: () => {
-        const allStaff = [
-            { rank: 1, name: "Rajesh Kumar", region: "Tumkur Region", score: "92.4%", theme: "green", avatarUrl: "https://picsum.photos/100/100?random=1", metrics: [{ l: 'FTOD', v: '4.8%' }, { l: '1-30', v: '2.1%' }, { l: '31-60', v: '1.2%' }] },
-            { rank: 2, name: "Anjali Singh", region: "Kolar District", score: "88.1%", theme: "green", avatarUrl: "https://picsum.photos/100/100?random=2", metrics: [{ l: 'FTOD', v: '3.9%' }, { l: '1-30', v: '1.8%' }, { l: '31-60', v: '0.9%' }] },
-            { rank: 3, name: "Priya Sharma", region: "Tiptur Zone", score: "76.5%", theme: "orange", avatarUrl: "https://picsum.photos/100/100?random=3", metrics: [{ l: 'FTOD', v: '2.5%' }, { l: '1-30', v: '4.1%' }, { l: '31-60', v: '1.1%' }] },
-            { rank: 4, name: "Vikram M.", region: "Chikkamagaluru", score: "62.3%", theme: "orange", initials: "VM", metrics: [{ l: 'FTOD', v: '1.2%' }, { l: '1-30', v: '3.2%' }, { l: '31-60', v: '4.5%' }] },
-            { rank: 5, name: "Suresh Rao", region: "Vijayapura", score: "45.8%", theme: "red", initials: "SR", metrics: [{ l: 'FTOD', v: '0.8%' }, { l: '1-30', v: '5.1%' }, { l: '31-60', v: '6.2%' }] }
-        ];
-
+        const allStaff = state.data.staff || [];
         const filteredStaff = allStaff.filter(s => s.name.toLowerCase().includes(state.searchTerm.toLowerCase()));
 
         return `
@@ -314,40 +702,44 @@ const Views = {
             <div class="mt-4">
                 <div class="relative">
                     <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><span class="material-icons-round text-gray-400">search</span></span>
-                    <input oninput="actions.search(this.value)" value="${state.searchTerm}" class="block w-full pl-10 pr-3 py-3 border-none rounded-xl bg-gray-100 dark:bg-gray-800 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary dark:text-white" placeholder="Search officer..." type="text">
+                    <input oninput="actions.search(this.value)" value="${state.searchTerm}" class="block w-full pl-10 pr-3 py-3 border-none rounded-xl bg-gray-100 dark:bg-gray-800 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary dark:text-white" placeholder="Search staff..." type="text">
                 </div>
             </div>
         </header>
         
         <main class="p-4 space-y-4 view-animate">
-            ${filteredStaff.map(staff => `
+            ${filteredStaff.length === 0 ? Components.EmptyState('No staff data. Navigate to a branch to view staff.') :
+                filteredStaff.map(staff => `
                 <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex items-center gap-3">
                             <div class="relative">
-                                ${staff.avatarUrl ?
-                `<img class="w-12 h-12 rounded-full object-cover border-2 border-white dark:border-gray-800 shadow-sm" src="${staff.avatarUrl}" alt="${staff.name}"/>` :
-                `<div class="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-lg border-2 border-white dark:border-gray-800 shadow-sm">${staff.initials}</div>`
-            }
+                                <div class="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-lg border-2 border-white dark:border-gray-800 shadow-sm">${staff.initials}</div>
                                 <div class="absolute -bottom-1 -right-1 w-5 h-5 bg-gray-700 rounded-full flex items-center justify-center text-[10px] font-bold text-white border-2 border-white dark:border-gray-800 shadow-sm">${staff.rank}</div>
                             </div>
                             <div>
                                 <h4 class="font-bold text-sm text-gray-900 dark:text-white">${staff.name}</h4>
-                                <p class="text-xs text-gray-500">${staff.region}</p>
+                                <p class="text-xs text-gray-500">ID: ${staff.id}</p>
                             </div>
                         </div>
                         <div class="text-right">
-                            <p class="text-lg font-bold ${staff.theme === 'green' ? 'text-green-600' : staff.theme === 'orange' ? 'text-orange-500' : 'text-red-500'}">${staff.score}</p>
+                            <p class="text-lg font-bold ${getThemeByPercentage(staff.score) === 'green' ? 'text-green-600' : getThemeByPercentage(staff.score) === 'orange' ? 'text-orange-500' : 'text-red-500'}">${staff.score}%</p>
                             <p class="text-[10px] text-gray-400">Score</p>
                         </div>
                     </div>
                     <div class="grid grid-cols-3 gap-2 mt-2 pt-3 border-t border-gray-100 dark:border-gray-700">
-                        ${staff.metrics.map(m => `
-                            <div class="text-center">
-                                <p class="text-[10px] text-gray-500 uppercase font-medium">${m.l}</p>
-                                <p class="text-sm font-bold mt-1">${m.v}</p>
-                            </div>
-                        `).join('')}
+                        <div class="text-center">
+                            <p class="text-[10px] text-gray-500 uppercase font-medium">FTOD</p>
+                            <p class="text-sm font-bold mt-1">${staff.ftod}%</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-[10px] text-gray-500 uppercase font-medium">1-30</p>
+                            <p class="text-sm font-bold mt-1">${staff.dpd1_30}%</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-[10px] text-gray-500 uppercase font-medium">31-60</p>
+                            <p class="text-sm font-bold mt-1">${staff.dpd31_60}%</p>
+                        </div>
                     </div>
                 </div>
             `).join('')}
@@ -363,62 +755,10 @@ const Views = {
                 </button>
                 <h1 class="text-lg font-bold text-center flex-1 pr-10">Risk Alerts</h1>
             </div>
-             <div class="flex gap-3 mt-6">
-                <button class="flex-1 flex items-center justify-between px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium">
-                    <div class="flex flex-col items-start"><span class="text-[10px] text-gray-400">Region</span><span>All</span></div><span class="material-icons-round text-gray-400">expand_more</span>
-                </button>
-                <button class="flex-1 flex items-center justify-between px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium">
-                    <div class="flex flex-col items-start"><span class="text-[10px] text-gray-400">Severity</span><span class="text-red-500">Critical</span></div><span class="material-icons-round text-gray-400">expand_more</span>
-                </button>
-            </div>
         </header>
 
         <main class="p-4 space-y-6 view-animate">
-            <section class="bg-surface-light dark:bg-surface-dark rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
-                <div class="flex justify-between items-start mb-4">
-                    <div>
-                        <h2 class="text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wider">Risk Overview</h2>
-                        <p class="text-3xl font-bold mt-1 text-gray-900 dark:text-white">14 <span class="text-lg font-medium text-gray-500 dark:text-gray-400">Alerts</span></p>
-                        <p class="text-xs text-red-500 font-medium mt-1 flex items-center gap-1"><span class="material-icons-round text-sm">trending_up</span> +3 today</p>
-                    </div>
-                    ${Components.DonutChart(75, 64, "text-red-500", `<div class="flex flex-col items-center"><span class="text-[10px] text-gray-400">Risk</span><span class="text-sm font-bold text-red-500">High</span></div>`)}
-                </div>
-            </section>
-
-             <div class="flex items-center justify-between px-1">
-                 <h3 class="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">Urgent <span class="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">5</span></h3>
-                 <button class="text-primary text-xs font-semibold flex items-center gap-1">Sort <span class="material-icons-round text-sm">sort</span></button>
-            </div>
-
-            <div class="space-y-4">
-                <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl shadow-sm border-l-4 border-l-red-500 border-y border-r border-gray-100 dark:border-gray-700">
-                    <div class="flex justify-between items-start mb-3">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 flex items-center justify-center"><span class="material-icons-round">dangerous</span></div>
-                            <div><h4 class="font-bold text-sm text-gray-900 dark:text-white">High NPA Risk</h4><p class="text-xs text-gray-500">Tumkur Branch</p></div>
-                        </div>
-                        <span class="bg-red-50 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded-full">CRITICAL</span>
-                    </div>
-                     <div class="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 flex items-center justify-between border border-gray-100 dark:border-gray-700">
-                        <div><p class="text-[10px] text-gray-500 uppercase">Metric</p><p class="text-sm font-bold text-gray-900 dark:text-white">NPA > 5%</p></div>
-                        <div class="text-right"><p class="text-[10px] text-gray-500 uppercase">Value</p><p class="text-lg font-bold text-red-600">₹ 2.67L</p></div>
-                    </div>
-                </div>
-
-                <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl shadow-sm border-l-4 border-l-orange-500 border-y border-r border-gray-100 dark:border-gray-700">
-                    <div class="flex justify-between items-start mb-3">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 flex items-center justify-center"><span class="material-icons-round">person_alert</span></div>
-                            <div><h4 class="font-bold text-sm text-gray-900 dark:text-white">Potential NPA</h4><p class="text-xs text-gray-500">Kolar District</p></div>
-                        </div>
-                        <span class="bg-orange-50 text-orange-600 text-[10px] font-bold px-2 py-0.5 rounded-full">HIGH RISK</span>
-                    </div>
-                     <div class="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 flex items-center justify-between border border-gray-100 dark:border-gray-700">
-                        <div><p class="text-[10px] text-gray-500 uppercase">Movement</p><p class="text-sm font-bold text-gray-900 dark:text-white">31-60 DPD</p></div>
-                        <div class="text-right"><p class="text-[10px] text-gray-500 uppercase">Exposure</p><p class="text-lg font-bold text-orange-600">₹ 1.15L</p></div>
-                    </div>
-                </div>
-            </div>
+            ${Components.EmptyState('Risk alerts will be calculated from uploaded data.')}
         </main>`;
     },
 
@@ -432,33 +772,22 @@ const Views = {
             
             <div class="flex items-center gap-4">
                 <div class="relative">
-                    <div class="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold border-4 border-white dark:border-gray-800">JD</div>
-                    <button class="absolute bottom-0 right-0 bg-primary text-white p-1.5 rounded-full border-2 border-white dark:border-gray-800 shadow-sm"><span class="material-icons-round text-xs">edit</span></button>
+                    <div class="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center text-primary text-2xl font-bold border-4 border-white dark:border-gray-800">AD</div>
                 </div>
                 <div>
-                    <h2 class="text-xl font-bold text-gray-900 dark:text-white">John Doe</h2>
-                    <p class="text-sm text-gray-500">Regional Manager • Karnataka</p>
-                    <div class="flex items-center gap-1 mt-1 text-green-600 text-xs font-medium"><span class="w-2 h-2 rounded-full bg-green-500"></span> Active now</div>
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-white">Admin User</h2>
+                    <p class="text-sm text-gray-500">Collection Pro Dashboard</p>
                 </div>
             </div>
 
             <div class="grid grid-cols-3 gap-4 mt-8">
-                <div class="text-center"><p class="text-2xl font-bold text-gray-900 dark:text-white">4</p><p class="text-xs text-gray-500 uppercase tracking-wide mt-1">Regions</p></div>
-                <div class="text-center border-l border-r border-gray-100 dark:border-gray-700"><p class="text-2xl font-bold text-gray-900 dark:text-white">92%</p><p class="text-xs text-gray-500 uppercase tracking-wide mt-1">Efficiency</p></div>
-                <div class="text-center"><p class="text-2xl font-bold text-gray-900 dark:text-white">12</p><p class="text-xs text-gray-500 uppercase tracking-wide mt-1">Team</p></div>
+                <div class="text-center"><p class="text-2xl font-bold text-gray-900 dark:text-white">${state.data.regions.length}</p><p class="text-xs text-gray-500 uppercase tracking-wide mt-1">Regions</p></div>
+                <div class="text-center border-l border-r border-gray-100 dark:border-gray-700"><p class="text-2xl font-bold text-gray-900 dark:text-white">${state.data.summary ? state.data.summary.percentage : 0}%</p><p class="text-xs text-gray-500 uppercase tracking-wide mt-1">Overall</p></div>
+                <div class="text-center"><p class="text-2xl font-bold text-gray-900 dark:text-white">${state.data.branches.length}</p><p class="text-xs text-gray-500 uppercase tracking-wide mt-1">Branches</p></div>
             </div>
         </div>
 
         <main class="px-4 space-y-4 view-animate">
-            <section class="bg-surface-light dark:bg-surface-dark rounded-2xl p-2 shadow-sm border border-gray-100 dark:border-gray-700">
-                <button class="w-full flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors mb-1">
-                    <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-600"><span class="material-icons-round text-lg">person</span></div><span class="text-sm font-medium text-gray-900 dark:text-white">Personal Info</span></div><span class="material-icons-round text-gray-300">chevron_right</span>
-                </button>
-                 <button class="w-full flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-xl transition-colors">
-                    <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-600"><span class="material-icons-round text-lg">account_balance_wallet</span></div><span class="text-sm font-medium text-gray-900 dark:text-white">Incentives</span></div><span class="material-icons-round text-gray-300">chevron_right</span>
-                </button>
-            </section>
-
              <section class="bg-surface-light dark:bg-surface-dark rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
                 <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Preferences</h3>
                 <div class="flex items-center justify-between mb-6">
@@ -466,8 +795,8 @@ const Views = {
                     <button onclick="actions.toggleDarkMode()" class="w-12 h-6 rounded-full p-1 transition-colors duration-200 ease-in-out ${state.darkMode ? 'bg-primary' : 'bg-gray-200'}"><div class="w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform duration-200 ${state.darkMode ? 'translate-x-6' : 'translate-x-0'}"></div></button>
                 </div>
             </section>
-             <button class="w-full py-4 text-red-500 font-semibold bg-surface-light dark:bg-surface-dark rounded-2xl shadow-sm hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors">Log Out</button>
-             <p class="text-center text-xs text-gray-400 pt-4 pb-4">Version 2.4.0</p>
+             <button onclick="DataService.fetchDashboardData()" class="w-full py-4 text-primary font-semibold bg-surface-light dark:bg-surface-dark rounded-2xl shadow-sm hover:bg-primary/10 transition-colors">Refresh All Data</button>
+             <p class="text-center text-xs text-gray-400 pt-4 pb-4">Collection Pro v2.0 • Supabase Connected</p>
         </main>`;
     }
 };
@@ -494,19 +823,76 @@ const actions = {
         } else {
             html.classList.remove('dark');
         }
-        render(); // Re-render to update toggle switch UI
+        render();
     },
     search: (term) => {
         state.searchTerm = term;
-        // Optimization: Don't re-render whole app, just the list part ideally.
-        // For simplicity in this demo, we re-render.
         render();
-        // Restore focus to input after render
         const input = document.querySelector('input');
         if (input) {
             input.focus();
-            input.value = term; // Ensure cursor doesn't jump weirdly
+            input.value = term;
         }
+    },
+    selectRegion: (regionName) => {
+        state.selectedRegion = regionName;
+        DataService.fetchBranchData(regionName);
+        router.navigate('REGION_DETAIL');
+    },
+    selectBranch: (branchName) => {
+        state.selectedBranch = branchName;
+        DataService.fetchStaffData(branchName);
+        router.navigate('BRANCH_DETAIL');
+    },
+    // Date Picker Actions
+    prevDate: () => {
+        const currentDate = state.dateFilter.selectedDates[0] || new Date();
+        state.dateFilter.selectedDates = [DateUtils.addDays(currentDate, -1)];
+        DataService.fetchDashboardData();
+    },
+    nextDate: () => {
+        const currentDate = state.dateFilter.selectedDates[0] || new Date();
+        const tomorrow = DateUtils.addDays(currentDate, 1);
+        const today = new Date();
+        // Don't go beyond today
+        if (tomorrow <= today) {
+            state.dateFilter.selectedDates = [tomorrow];
+            DataService.fetchDashboardData();
+        }
+    },
+    toggleDatePicker: () => {
+        state.dateFilter.showPicker = !state.dateFilter.showPicker;
+        render();
+    },
+    closeDatePicker: (event) => {
+        if (!event || event.target === event.currentTarget) {
+            state.dateFilter.showPicker = false;
+            render();
+        }
+    },
+    toggleDateSelection: (isoString) => {
+        const date = new Date(isoString);
+        const existingIndex = state.dateFilter.selectedDates.findIndex(d => DateUtils.isSameDay(d, date));
+
+        if (existingIndex >= 0) {
+            // Remove if already selected (but keep at least one)
+            if (state.dateFilter.selectedDates.length > 1) {
+                state.dateFilter.selectedDates.splice(existingIndex, 1);
+            }
+        } else {
+            // Add to selection
+            state.dateFilter.selectedDates.push(date);
+            state.dateFilter.selectedDates.sort((a, b) => a - b);
+        }
+        render();
+    },
+    selectToday: () => {
+        state.dateFilter.selectedDates = [new Date()];
+        render();
+    },
+    applyDateFilter: () => {
+        state.dateFilter.showPicker = false;
+        DataService.fetchDashboardData();
     }
 };
 
@@ -537,10 +923,15 @@ function render() {
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
-    // Check system preference
+    // Check system preference for dark mode
     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
         // state.darkMode = true;
         // document.documentElement.classList.add('dark');
     }
+
+    // Initial render
     render();
+
+    // Fetch data from Supabase
+    DataService.fetchDashboardData();
 });
