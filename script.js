@@ -3,7 +3,7 @@
  */
 
 // --- Supabase Client ---
-const supabase = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+const db = window.supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.anonKey);
 
 // --- State Management ---
 const state = {
@@ -16,7 +16,8 @@ const state = {
     // Date filter
     dateFilter: {
         selectedDates: [new Date()], // Array for multiple date selection
-        showPicker: false
+        showPicker: false,
+        userSelected: false // Track if user has explicitly selected dates
     },
     // Data from Supabase
     data: {
@@ -84,24 +85,64 @@ const DataService = {
         render();
 
         try {
-            // Build date filter query
-            let query = supabase
-                .from('master_data')
-                .select('region_name, total_demand_amount, achievement_amount, dpd_group_present, date, month, year')
-                .not('region_name', 'is', null);
+            // If not user selected, first find the latest available date
+            if (!state.dateFilter.userSelected) {
+                // Get distinct dates and find the most recent one
+                const { data: datesData, error: dateError } = await db
+                    .from('master_data')
+                    .select('date, month, year')
+                    .limit(100);
 
-            // Apply date filter if dates selected
-            if (state.dateFilter.selectedDates.length > 0) {
-                const dateConditions = state.dateFilter.selectedDates.map(d => {
-                    const dbDate = DateUtils.toDBFormat(d);
-                    return `and(date.eq.${dbDate.date},month.eq.${dbDate.month},year.eq.${dbDate.year})`;
-                });
-                query = query.or(dateConditions.join(','));
+                console.log('Dates query result:', { datesData, dateError });
+
+                if (!dateError && datesData && datesData.length > 0) {
+                    // Convert to Date objects and find the most recent
+                    let latestDate = null;
+                    datesData.forEach(row => {
+                        if (!row.date || !row.month || !row.year) return;
+                        const monthIndex = MONTHS.findIndex(m => m.toUpperCase() === String(row.month).toUpperCase());
+                        if (monthIndex !== -1) {
+                            const d = new Date(row.year, monthIndex, row.date);
+                            if (!latestDate || d > latestDate) {
+                                latestDate = d;
+                            }
+                        }
+                    });
+                    console.log('Latest date found:', latestDate);
+                    if (latestDate) {
+                        state.dateFilter.selectedDates = [latestDate];
+                    }
+                }
+                // Mark as having fetched latest date to avoid re-fetching
+                state.dateFilter.userSelected = true;
             }
 
-            const { data: regionData, error } = await query;
+            // Build query - fetch ALL data for the selected date
+            const selectedDate = state.dateFilter.selectedDates[0];
+            const dbDate = DateUtils.toDBFormat(selectedDate);
+
+            console.log('Fetching data for date:', dbDate);
+
+            const { data: regionData, error } = await db
+                .from('master_data')
+                .select('region_name, total_demand_amount, achievement_amount, dpd_group_present, date, month, year')
+                .eq('date', dbDate.date)
+                .eq('month', dbDate.month)
+                .eq('year', dbDate.year);
+
+            console.log('Region data result:', { count: regionData?.length, error });
 
             if (error) throw error;
+
+            // If no data, show empty state
+            if (!regionData || regionData.length === 0) {
+                state.data.loading = false;
+                state.data.summary = null;
+                state.data.regions = [];
+                state.data.lastUpdated = new Date().toLocaleDateString('en-IN');
+                render();
+                return;
+            }
 
             // Aggregate by region
             const regionsMap = {};
@@ -167,6 +208,10 @@ const DataService = {
         } catch (error) {
             console.error('Error fetching data:', error);
             state.data.loading = false;
+            state.data.summary = null;
+            state.data.regions = [];
+            render();
+            return;
         }
 
         render();
@@ -175,7 +220,7 @@ const DataService = {
     // Fetch branches for a specific region
     async fetchBranchData(regionName) {
         try {
-            const { data: branchData, error } = await supabase
+            const { data: branchData, error } = await db
                 .from('master_data')
                 .select('branch_name, branch_code, total_demand_amount, achievement_amount, dpd_group_present')
                 .eq('region_name', regionName);
@@ -227,7 +272,7 @@ const DataService = {
     // Fetch staff data for a specific branch
     async fetchStaffData(branchName) {
         try {
-            const { data: staffData, error } = await supabase
+            const { data: staffData, error } = await db
                 .from('master_data')
                 .select('employee_id, employee_name, total_demand_amount, achievement_amount, dpd_group_present')
                 .eq('branch_name', branchName);
@@ -848,6 +893,7 @@ const actions = {
     prevDate: () => {
         const currentDate = state.dateFilter.selectedDates[0] || new Date();
         state.dateFilter.selectedDates = [DateUtils.addDays(currentDate, -1)];
+        state.dateFilter.userSelected = true;
         DataService.fetchDashboardData();
     },
     nextDate: () => {
@@ -857,6 +903,7 @@ const actions = {
         // Don't go beyond today
         if (tomorrow <= today) {
             state.dateFilter.selectedDates = [tomorrow];
+            state.dateFilter.userSelected = true;
             DataService.fetchDashboardData();
         }
     },
@@ -888,10 +935,12 @@ const actions = {
     },
     selectToday: () => {
         state.dateFilter.selectedDates = [new Date()];
+        state.dateFilter.userSelected = true;
         render();
     },
     applyDateFilter: () => {
         state.dateFilter.showPicker = false;
+        state.dateFilter.userSelected = true;
         DataService.fetchDashboardData();
     }
 };
@@ -922,7 +971,21 @@ function render() {
 }
 
 // --- Initialization ---
-document.addEventListener('DOMContentLoaded', () => {
+
+// Attach to window for global access (needed for onclick handlers in HTML)
+window.router = router;
+window.actions = actions;
+window.DataService = DataService;
+window.render = render;
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
+
+function init() {
     // Check system preference for dark mode
     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
         // state.darkMode = true;
@@ -934,4 +997,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Fetch data from Supabase
     DataService.fetchDashboardData();
-});
+}

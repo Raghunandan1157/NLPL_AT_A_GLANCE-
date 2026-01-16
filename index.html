@@ -51,30 +51,34 @@
 
   <!-- Main Content Area -->
   <div id="app" class="min-h-screen pb-24 transition-opacity duration-200 opacity-100">
-    <!-- Views will be injected here by script.js -->
+    <!-- Initial Loading State -->
+    <div class="flex flex-col items-center justify-center min-h-screen pb-20">
+      <div class="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mb-4"></div>
+      <p class="text-gray-500 font-medium animate-pulse">Loading Collection Pro...</p>
+    </div>
   </div>
 
   <!-- Bottom Navigation -->
   <nav
     class="fixed bottom-0 w-full bg-surface-light dark:bg-surface-dark border-t border-gray-200 dark:border-gray-700 pb-safe pt-2 px-6 flex justify-between items-center z-40 pb-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-    <button onclick="router.navigate('GLOBAL_DASHBOARD')"
+    <button onclick="window.router.navigate('GLOBAL_DASHBOARD')"
       class="nav-btn flex flex-col items-center gap-1 transition-colors text-primary" data-view="GLOBAL_DASHBOARD">
       <span class="material-icons-round text-2xl">analytics</span>
       <span class="text-[10px] font-medium">Reports</span>
     </button>
-    <button onclick="router.navigate('STAFF_LIST')"
+    <button onclick="window.router.navigate('STAFF_LIST')"
       class="nav-btn flex flex-col items-center gap-1 transition-colors text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
       data-view="STAFF_LIST">
       <span class="material-icons-round text-2xl">people</span>
       <span class="text-[10px] font-medium">Staff</span>
     </button>
-    <button onclick="router.navigate('RISK_CENTER')"
+    <button onclick="window.router.navigate('RISK_CENTER')"
       class="nav-btn flex flex-col items-center gap-1 transition-colors text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
       data-view="RISK_CENTER">
       <span class="material-icons-round text-2xl">notifications</span>
       <span class="text-[10px] font-medium">Alerts</span>
     </button>
-    <button onclick="router.navigate('PROFILE')"
+    <button onclick="window.router.navigate('PROFILE')"
       class="nav-btn flex flex-col items-center gap-1 transition-colors text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
       data-view="PROFILE">
       <span class="material-icons-round text-2xl">account_circle</span>
@@ -82,11 +86,18 @@
     </button>
   </nav>
 
-  <!-- Supabase Client -->
+  <!-- Supabase Client (must load first) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js"></script>
 
-  <!-- App Logic -->
+  <!-- Config (Inlined for reliability) -->
+  <script>
+    window.SUPABASE_CONFIG = {
+      url: 'https://zovnmmdfthpbubrorsgh.supabase.co',
+      anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpvdm5tbWRmdGhwYnVicm9yc2doIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE1NzE3ODgsImV4cCI6MjA3NzE0Nzc4OH0.92BH2sjUOgkw6iSRj1_4gt0p3eThg3QT4VK-Q4EdmBE'
+    };
+  </script>
+
+  <!-- App Logic (depends on Supabase and config) -->
   <script src="script.js"></script>
 </body>
 

@@ -30,7 +30,7 @@ BATCH_SIZE = 1000
 
 @app.route('/')
 def index():
-    return send_from_directory('.', 'index.html')
+    return send_from_directory('.', 'upload.html')
 
 
 @app.route('/upload', methods=['POST'])
