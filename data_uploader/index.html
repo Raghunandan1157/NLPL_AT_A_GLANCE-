@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Uploader - Supabase</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <span class="material-icons-round">cloud_upload</span>
+                <h1>Data Uploader</h1>
+            </div>
+            <p class="subtitle">Upload CSV/Excel to Supabase • Efficient batch processing for large files</p>
+        </header>
+
+        <!-- DateTime Selector -->
+        <section class="datetime-section">
+            <h2><span class="material-icons-round">schedule</span> Timestamp Settings</h2>
+            <p class="section-hint">Auto-filled with current time. Adjust before uploading.</p>
+            <div class="datetime-grid">
+                <div class="datetime-input">
+                    <label for="hour">Hour</label>
+                    <input type="number" id="hour" min="0" max="23">
+                </div>
+                <div class="datetime-input">
+                    <label for="date">Date</label>
+                    <input type="number" id="date" min="1" max="31">
+                </div>
+                <div class="datetime-input">
+                    <label for="month">Month</label>
+                    <select id="month">
+                        <option value="JAN">JAN</option>
+                        <option value="FEB">FEB</option>
+                        <option value="MAR">MAR</option>
+                        <option value="APR">APR</option>
+                        <option value="MAY">MAY</option>
+                        <option value="JUN">JUN</option>
+                        <option value="JUL">JUL</option>
+                        <option value="AUG">AUG</option>
+                        <option value="SEP">SEP</option>
+                        <option value="OCT">OCT</option>
+                        <option value="NOV">NOV</option>
+                        <option value="DEC">DEC</option>
+                    </select>
+                </div>
+                <div class="datetime-input">
+                    <label for="year">Year</label>
+                    <input type="number" id="year" min="2020" max="2030">
+                </div>
+            </div>
+        </section>
+
+        <!-- Drop Zone -->
+        <section class="dropzone" id="dropzone">
+            <div class="dropzone-content">
+                <span class="material-icons-round upload-icon">upload_file</span>
+                <h3>Drag & Drop your file here</h3>
+                <p>or click to browse</p>
+                <span class="file-types">Supports CSV, XLSX, XLS</span>
+            </div>
+            <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" hidden>
+        </section>
+
+        <!-- File Info -->
+        <section class="file-info" id="fileInfo" style="display: none;">
+            <div class="file-header">
+                <span class="material-icons-round">description</span>
+                <div class="file-details">
+                    <h4 id="fileName">filename.csv</h4>
+                    <p id="fileSize">0 KB</p>
+                </div>
+                <button class="remove-btn" id="removeFile">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="preview-section" id="previewSection">
+                <h4>Preview (First 5 rows)</h4>
+                <div class="table-wrapper" id="previewTable"></div>
+            </div>
+        </section>
+
+        <!-- Upload Button -->
+        <button class="upload-btn" id="uploadBtn" disabled>
+            <span class="material-icons-round">cloud_upload</span>
+            Upload to Supabase
+        </button>
+
+        <!-- Progress -->
+        <section class="progress-section" id="progressSection" style="display: none;">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <p class="progress-text" id="progressText">Uploading...</p>
+        </section>
+
+        <!-- Result -->
+        <section class="result-section" id="resultSection" style="display: none;">
+            <div class="result-card" id="resultCard">
+                <span class="material-icons-round result-icon" id="resultIcon">check_circle</span>
+                <h3 id="resultTitle">Upload Complete</h3>
+                <div class="result-stats" id="resultStats"></div>
+            </div>
+        </section>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
