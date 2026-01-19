@@ -48,7 +48,6 @@ def upload_file():
         MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
         
         # Get user-selected datetime values
-        hour = int(request.form.get('hour', datetime.now().hour))
         date = int(request.form.get('date', datetime.now().day))
         month = request.form.get('month', MONTHS[datetime.now().month - 1])  # 3-letter format
         year = int(request.form.get('year', datetime.now().year))
@@ -67,7 +66,6 @@ def upload_file():
 
         # Add timestamp fields
         df['timestamp'] = datetime.now().isoformat()
-        df['hour'] = hour
         df['date'] = date
         df['month'] = month
         df['year'] = year
@@ -100,7 +98,6 @@ def upload_file():
             'inserted': inserted,
             'failed': total_records - inserted,
             'datetime_used': {
-                'hour': hour,
                 'date': date,
                 'month': month,
                 'year': year

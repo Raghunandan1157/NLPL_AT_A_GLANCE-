@@ -21,7 +21,6 @@ const resultTitle = document.getElementById('resultTitle');
 const resultStats = document.getElementById('resultStats');
 
 // DateTime inputs
-const hourInput = document.getElementById('hour');
 const dateInput = document.getElementById('date');
 const monthInput = document.getElementById('month');
 const yearInput = document.getElementById('year');
@@ -35,7 +34,6 @@ const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', '
 // Initialize datetime with current values
 function initDateTime() {
     const now = new Date();
-    hourInput.value = now.getHours();
     dateInput.value = now.getDate();
     monthInput.value = MONTHS[now.getMonth()];
     yearInput.value = now.getFullYear();
@@ -133,7 +131,6 @@ async function uploadFile() {
 
     const formData = new FormData();
     formData.append('file', selectedFile);
-    formData.append('hour', hourInput.value);
     formData.append('date', dateInput.value);
     formData.append('month', monthInput.value);
     formData.append('year', yearInput.value);

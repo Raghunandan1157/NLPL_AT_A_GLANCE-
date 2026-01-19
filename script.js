@@ -8,16 +8,16 @@ const db = window.supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPAB
 // --- State Management ---
 const state = {
     currentView: 'GLOBAL_DASHBOARD',
-    activeTab: 'IGL', // IGL, FIG, IL
+    activeTab: 'ALL', // 'ALL' or specific product
     searchTerm: '',
     darkMode: false,
     selectedRegion: null,
     selectedBranch: null,
     // Date filter
     dateFilter: {
-        selectedDates: [new Date()], // Array for multiple date selection
+        selectedDates: [new Date()],
         showPicker: false,
-        userSelected: false // Track if user has explicitly selected dates
+        userSelected: false
     },
     // Data from Supabase
     data: {
@@ -25,6 +25,7 @@ const state = {
         regions: [],
         branches: [],
         staff: [],
+        products: [], // List of unique products from database
         loading: true,
         lastUpdated: null
     }
@@ -85,20 +86,25 @@ const DataService = {
         render();
 
         try {
-            // If not user selected, first find the latest available date
+            // If not user selected, first find the latest available date and products
             if (!state.dateFilter.userSelected) {
-                // Get distinct dates and find the most recent one
-                const { data: datesData, error: dateError } = await db
+                // Get dates and products
+                const { data: metaData, error: metaError } = await db
                     .from('master_data')
-                    .select('date, month, year')
-                    .limit(100);
+                    .select('date, month, year, product_id')
+                    .limit(500);
 
-                console.log('Dates query result:', { datesData, dateError });
-
-                if (!dateError && datesData && datesData.length > 0) {
-                    // Convert to Date objects and find the most recent
+                if (!metaError && metaData && metaData.length > 0) {
+                    // Find latest date
                     let latestDate = null;
-                    datesData.forEach(row => {
+                    const productsSet = new Set();
+
+                    metaData.forEach(row => {
+                        // Collect products
+                        if (row.product_id) {
+                            productsSet.add(row.product_id);
+                        }
+                        // Find latest date
                         if (!row.date || !row.month || !row.year) return;
                         const monthIndex = MONTHS.findIndex(m => m.toUpperCase() === String(row.month).toUpperCase());
                         if (monthIndex !== -1) {
@@ -108,29 +114,34 @@ const DataService = {
                             }
                         }
                     });
-                    console.log('Latest date found:', latestDate);
+
                     if (latestDate) {
                         state.dateFilter.selectedDates = [latestDate];
                     }
+
+                    // Store products
+                    state.data.products = Array.from(productsSet).sort();
                 }
-                // Mark as having fetched latest date to avoid re-fetching
                 state.dateFilter.userSelected = true;
             }
 
-            // Build query - fetch ALL data for the selected date
+            // Build query - fetch data for the selected date
             const selectedDate = state.dateFilter.selectedDates[0];
             const dbDate = DateUtils.toDBFormat(selectedDate);
 
-            console.log('Fetching data for date:', dbDate);
-
-            const { data: regionData, error } = await db
+            let query = db
                 .from('master_data')
-                .select('region_name, total_demand_amount, achievement_amount, dpd_group_present, date, month, year')
+                .select('region_name, total_demand_amount, achievement_amount, dpd_group_present, product_id, date, month, year')
                 .eq('date', dbDate.date)
                 .eq('month', dbDate.month)
                 .eq('year', dbDate.year);
 
-            console.log('Region data result:', { count: regionData?.length, error });
+            // Filter by product if not "ALL"
+            if (state.activeTab !== 'ALL') {
+                query = query.eq('product_id', state.activeTab);
+            }
+
+            const { data: regionData, error } = await query;
 
             if (error) throw error;
 
@@ -507,7 +518,7 @@ const getTrendColor = (value) => {
 
 const Views = {
     GLOBAL_DASHBOARD: () => {
-        const tabs = ['IGL', 'FIG', 'IL'];
+        const tabs = ['ALL', ...state.data.products.filter(p => p !== 'ALL')];
         const summary = state.data.summary;
         const regions = state.data.regions;
 
@@ -555,9 +566,9 @@ const Views = {
             
             <div class="flex items-center justify-between mt-2 bg-gray-100 dark:bg-gray-900 p-1 rounded-xl">
                 ${tabs.map(tab => `
-                    <button onclick="actions.setTab('${tab}')" 
+                    <button onclick="actions.setTab('${tab}')"
                         class="flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${state.activeTab === tab ? 'bg-surface-light dark:bg-surface-dark shadow-sm text-primary' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'}">
-                        ${tab}
+                        ${tab === 'ALL' ? 'All' : tab}
                     </button>
                 `).join('')}
             </div>
@@ -568,7 +579,7 @@ const Views = {
             <section class="bg-surface-light dark:bg-surface-dark rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
                 <div class="flex justify-between items-start mb-4">
                     <div>
-                        <h2 class="text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wider">Overall Performance (${state.activeTab})</h2>
+                        <h2 class="text-gray-500 dark:text-gray-400 text-xs font-semibold uppercase tracking-wider">Overall Performance (${state.activeTab === 'ALL' ? 'All Products' : state.activeTab})</h2>
                         <p class="text-2xl font-bold mt-1">${DataService.formatCurrency(summary.totalAchievement)} <span class="text-sm font-normal text-gray-500 dark:text-gray-400">/ ${DataService.formatCurrency(summary.totalDemand)}</span></p>
                     </div>
                     ${Components.DonutChart(parseFloat(summary.percentage))}
@@ -858,7 +869,7 @@ const router = {
 const actions = {
     setTab: (tabName) => {
         state.activeTab = tabName;
-        render();
+        DataService.fetchDashboardData();
     },
     toggleDarkMode: () => {
         state.darkMode = !state.darkMode;
