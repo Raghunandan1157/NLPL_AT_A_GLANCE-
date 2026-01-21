@@ -1,9 +1,9 @@
 /**
- * Collection Pro - Vanilla JS Implementation with Supabase Integration
+ * Collection Pro - Vanilla JS Implementation with Local Mock Data
  */
 
-// --- Supabase Client ---
-const db = window.supabase.createClient(window.SUPABASE_CONFIG.url, window.SUPABASE_CONFIG.anonKey);
+// --- Mock Database Reference ---
+// Uses window.MockDB from mockData.js
 
 // --- State Management ---
 const state = {
@@ -19,7 +19,7 @@ const state = {
         showPicker: false,
         userSelected: false
     },
-    // Data from Supabase
+    // Data from Mock Database
     data: {
         summary: null,
         regions: [],
@@ -88,11 +88,11 @@ const DataService = {
         try {
             // If not user selected, first find the latest available date and products
             if (!state.dateFilter.userSelected) {
-                // Get dates and products
-                const { data: metaData, error: metaError } = await db
-                    .from('master_data')
-                    .select('date, month, year, product_id')
-                    .limit(500);
+                // Get dates and products from mock data
+                const { data: metaData, error: metaError } = await window.MockDB.query({
+                    select: ['date', 'month', 'year', 'product_id'],
+                    limit: 500
+                });
 
                 if (!metaError && metaData && metaData.length > 0) {
                     // Find latest date
@@ -129,19 +129,19 @@ const DataService = {
             const selectedDate = state.dateFilter.selectedDates[0];
             const dbDate = DateUtils.toDBFormat(selectedDate);
 
-            let query = db
-                .from('master_data')
-                .select('region_name, total_demand_amount, achievement_amount, dpd_group_present, product_id, date, month, year')
-                .eq('date', dbDate.date)
-                .eq('month', dbDate.month)
-                .eq('year', dbDate.year);
+            // Query filters
+            const filters = {
+                date: dbDate.date,
+                month: dbDate.month,
+                year: dbDate.year
+            };
 
             // Filter by product if not "ALL"
             if (state.activeTab !== 'ALL') {
-                query = query.eq('product_id', state.activeTab);
+                filters.product_id = state.activeTab;
             }
 
-            const { data: regionData, error } = await query;
+            const { data: regionData, error } = await window.MockDB.query(filters);
 
             if (error) throw error;
 
@@ -231,10 +231,9 @@ const DataService = {
     // Fetch branches for a specific region
     async fetchBranchData(regionName) {
         try {
-            const { data: branchData, error } = await db
-                .from('master_data')
-                .select('branch_name, branch_code, total_demand_amount, achievement_amount, dpd_group_present')
-                .eq('region_name', regionName);
+            const { data: branchData, error } = await window.MockDB.query({
+                region_name: regionName
+            });
 
             if (error) throw error;
 
@@ -283,10 +282,9 @@ const DataService = {
     // Fetch staff data for a specific branch
     async fetchStaffData(branchName) {
         try {
-            const { data: staffData, error } = await db
-                .from('master_data')
-                .select('employee_id, employee_name, total_demand_amount, achievement_amount, dpd_group_present')
-                .eq('branch_name', branchName);
+            const { data: staffData, error } = await window.MockDB.query({
+                branch_name: branchName
+            });
 
             if (error) throw error;
 
@@ -548,7 +546,7 @@ const Views = {
                 </div>
             </header>
             <main class="p-4">
-                ${Components.EmptyState('No data available. Upload data using the Data Uploader.')}
+                ${Components.EmptyState('No data available for this date. Try selecting a different date.')}
             </main>`;
         }
 
@@ -852,7 +850,7 @@ const Views = {
                 </div>
             </section>
              <button onclick="DataService.fetchDashboardData()" class="w-full py-4 text-primary font-semibold bg-surface-light dark:bg-surface-dark rounded-2xl shadow-sm hover:bg-primary/10 transition-colors">Refresh All Data</button>
-             <p class="text-center text-xs text-gray-400 pt-4 pb-4">Collection Pro v2.0 • Supabase Connected</p>
+             <p class="text-center text-xs text-gray-400 pt-4 pb-4">Collection Pro v2.0 • Sample Data Mode</p>
         </main>`;
     }
 };
