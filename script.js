@@ -1004,6 +1004,6 @@ function init() {
     // Initial render
     render();
 
-    // Fetch data from Supabase
+    // Fetch data from mock database
     DataService.fetchDashboardData();
 }
