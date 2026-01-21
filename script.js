@@ -24,7 +24,8 @@ const state = {
         summary: null,
         regions: [],
         branches: [],
-        staff: [],
+        staff: [], // Stores staff list for current view (Branch or Global)
+        alerts: [], // Stores risk alerts
         products: [], // List of unique products from database
         loading: true,
         lastUpdated: null
@@ -223,6 +224,176 @@ const DataService = {
             state.data.regions = [];
             render();
             return;
+        }
+
+        render();
+    },
+
+    // Fetch risk alerts
+    async fetchRiskAlerts() {
+        state.data.loading = true;
+        render();
+
+        try {
+            const selectedDate = state.dateFilter.selectedDates[0] || new Date();
+            const dbDate = DateUtils.toDBFormat(selectedDate);
+            const filters = {
+                date: dbDate.date,
+                month: dbDate.month,
+                year: dbDate.year
+            };
+
+            const { data: allData, error } = await window.MockDB.query(filters);
+
+            if (error) throw error;
+
+            const alerts = [];
+
+            // 1. Analyze for DPD Slippage
+            // DPD Order: FTOD (0) -> 0 (1) -> 1-30 (2) -> 31-60 (3) -> 61-90 (4) -> PNPA (5)
+            // Note: FTOD usually means "First Time", maybe 0?
+            // Let's assume degradation is moving right in the array.
+            const dpdOrder = ['FTOD', '0', '1-30', '31-60', 'PNPA', '61-90'];
+
+            allData.forEach(row => {
+                const prev = row.dpd_group_last_month;
+                const curr = row.dpd_group_present;
+
+                const prevIdx = dpdOrder.indexOf(prev);
+                const currIdx = dpdOrder.indexOf(curr);
+
+                if (prevIdx !== -1 && currIdx !== -1 && currIdx > prevIdx) {
+                    // Significant slippage: moved 2 steps or into 31-60+
+                    if (currIdx - prevIdx >= 2 || currIdx >= 3) {
+                        alerts.push({
+                            id: `alert-${row.id}`,
+                            type: 'slippage',
+                            severity: 'high',
+                            title: 'Significant DPD Slippage',
+                            message: `Account ${row.account_id} (${row.client_name}) moved from ${prev} to ${curr}`,
+                            date: row.created_at,
+                            link: null
+                        });
+                    }
+                }
+            });
+
+            // 2. Low Performing Staff
+            // Aggregate first
+            const staffMap = {};
+            allData.forEach(row => {
+                const empId = row.employee_id;
+                if (!empId) return;
+                if (!staffMap[empId]) {
+                    staffMap[empId] = { name: row.employee_name, total: 0, achieved: 0 };
+                }
+                staffMap[empId].total += parseFloat(row.total_demand_amount) || 0;
+                staffMap[empId].achieved += parseFloat(row.achievement_amount) || 0;
+            });
+
+            Object.values(staffMap).forEach(s => {
+                const pct = s.total > 0 ? (s.achieved / s.total) * 100 : 0;
+                if (pct < 50 && s.total > 10000) { // Threshold
+                    alerts.push({
+                        id: `alert-staff-${s.name}`,
+                        type: 'performance',
+                        severity: 'medium',
+                        title: 'Low Staff Performance',
+                        message: `${s.name} has only ${pct.toFixed(1)}% collection achievement.`,
+                        date: new Date().toISOString(),
+                        link: 'STAFF_LIST'
+                    });
+                }
+            });
+
+            // Sort alerts by severity (high first) then title
+            alerts.sort((a, b) => {
+                const severityScore = { high: 3, medium: 2, low: 1 };
+                return severityScore[b.severity] - severityScore[a.severity];
+            });
+
+            state.data.alerts = alerts;
+            state.data.loading = false;
+
+        } catch (error) {
+            console.error('Error fetching alerts:', error);
+            state.data.alerts = [];
+            state.data.loading = false;
+        }
+
+        render();
+    },
+
+    // Fetch all staff data (Global context)
+    async fetchAllStaff() {
+        state.data.loading = true;
+        render();
+
+        try {
+            // Build query - fetch data for the selected date
+            const selectedDate = state.dateFilter.selectedDates[0] || new Date();
+            const dbDate = DateUtils.toDBFormat(selectedDate);
+
+            // Query filters
+            const filters = {
+                date: dbDate.date,
+                month: dbDate.month,
+                year: dbDate.year
+            };
+
+            // Filter by product if not "ALL"
+            if (state.activeTab !== 'ALL') {
+                filters.product_id = state.activeTab;
+            }
+
+            const { data: staffData, error } = await window.MockDB.query(filters);
+
+            if (error) throw error;
+
+            const staffMap = {};
+            staffData.forEach(row => {
+                const empId = row.employee_id;
+                if (!empId) return;
+                if (!staffMap[empId]) {
+                    staffMap[empId] = {
+                        id: empId,
+                        name: row.employee_name || `Employee ${empId}`,
+                        totalDemand: 0,
+                        achievement: 0,
+                        dpdCounts: { FTOD: 0, '1-30': 0, '31-60': 0, total: 0 }
+                    };
+                }
+                staffMap[empId].totalDemand += parseFloat(row.total_demand_amount) || 0;
+                staffMap[empId].achievement += parseFloat(row.achievement_amount) || 0;
+                staffMap[empId].dpdCounts.total++;
+
+                const dpd = row.dpd_group_present;
+                if (dpd === 'FTOD' || dpd === '0') staffMap[empId].dpdCounts.FTOD++;
+                else if (dpd === '1-30') staffMap[empId].dpdCounts['1-30']++;
+                else if (dpd === '31-60') staffMap[empId].dpdCounts['31-60']++;
+            });
+
+            state.data.staff = Object.values(staffMap).map((s, idx) => ({
+                rank: 0, // Will set after sort
+                id: s.id,
+                name: s.name,
+                initials: s.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase(),
+                totalDemand: s.totalDemand,
+                achievement: s.achievement,
+                score: this.calcPercentage(s.achievement, s.totalDemand),
+                ftod: this.calcPercentage(s.dpdCounts.FTOD, s.dpdCounts.total),
+                dpd1_30: this.calcPercentage(s.dpdCounts['1-30'], s.dpdCounts.total),
+                dpd31_60: this.calcPercentage(s.dpdCounts['31-60'], s.dpdCounts.total)
+            })).sort((a, b) => parseFloat(b.score) - parseFloat(a.score));
+
+            // Update ranks after sorting
+            state.data.staff.forEach((s, idx) => s.rank = idx + 1);
+            state.data.loading = false;
+
+        } catch (error) {
+            console.error('Error fetching all staff data:', error);
+            state.data.staff = [];
+            state.data.loading = false;
         }
 
         render();
@@ -742,6 +913,21 @@ const Views = {
     },
 
     STAFF_LIST: () => {
+        if (state.data.loading) {
+            return `
+            <header class="sticky top-0 z-20 bg-surface-light dark:bg-surface-dark shadow-sm px-4 pt-12 pb-4 view-animate">
+                <div class="flex items-center justify-between">
+                    <button onclick="router.navigate('GLOBAL_DASHBOARD')" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300">
+                        <span class="material-icons-round text-2xl">arrow_back</span>
+                    </button>
+                    <h1 class="text-lg font-bold text-center flex-1 pr-10">Staff Performance</h1>
+                </div>
+            </header>
+            <main class="p-4">
+                ${Components.LoadingSpinner()}
+            </main>`;
+        }
+
         const allStaff = state.data.staff || [];
         const filteredStaff = allStaff.filter(s => s.name.toLowerCase().includes(state.searchTerm.toLowerCase()));
 
@@ -762,7 +948,7 @@ const Views = {
         </header>
         
         <main class="p-4 space-y-4 view-animate">
-            ${filteredStaff.length === 0 ? Components.EmptyState('No staff data. Navigate to a branch to view staff.') :
+            ${filteredStaff.length === 0 ? Components.EmptyState('No staff found matching your search.') :
                 filteredStaff.map(staff => `
                 <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <div class="flex justify-between items-start mb-3">
@@ -801,6 +987,23 @@ const Views = {
     },
 
     RISK_CENTER: () => {
+        if (state.data.loading) {
+            return `
+            <header class="sticky top-0 z-20 bg-surface-light dark:bg-surface-dark shadow-sm px-4 pt-12 pb-4 view-animate">
+                <div class="flex items-center justify-between">
+                    <button onclick="router.navigate('GLOBAL_DASHBOARD')" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300">
+                        <span class="material-icons-round text-2xl">arrow_back</span>
+                    </button>
+                    <h1 class="text-lg font-bold text-center flex-1 pr-10">Risk Alerts</h1>
+                </div>
+            </header>
+            <main class="p-4">
+                ${Components.LoadingSpinner()}
+            </main>`;
+        }
+
+        const alerts = state.data.alerts || [];
+
         return `
         <header class="sticky top-0 z-20 bg-surface-light dark:bg-surface-dark shadow-sm px-4 pt-12 pb-4 view-animate">
             <div class="flex items-center justify-between">
@@ -811,8 +1014,45 @@ const Views = {
             </div>
         </header>
 
-        <main class="p-4 space-y-6 view-animate">
-            ${Components.EmptyState('Risk alerts will be calculated from uploaded data.')}
+        <main class="p-4 space-y-4 view-animate">
+            ${alerts.length === 0 ? Components.EmptyState('No risk alerts found for this date.') :
+                alerts.map(alert => {
+                    const colors = {
+                        high: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-100 dark:border-red-800/30',
+                        medium: 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-100 dark:border-orange-800/30',
+                        low: 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 border-yellow-100 dark:border-yellow-800/30'
+                    };
+                    const icons = {
+                        slippage: 'trending_down',
+                        performance: 'speed',
+                        default: 'warning'
+                    };
+
+                    const colorClass = colors[alert.severity] || colors.low;
+                    const iconName = icons[alert.type] || icons.default;
+
+                    return `
+                    <div class="bg-surface-light dark:bg-surface-dark p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${colorClass}">
+                                <span class="material-icons-round">${iconName}</span>
+                            </div>
+                            <div class="flex-1">
+                                <div class="flex justify-between items-start">
+                                    <h4 class="font-bold text-sm text-gray-900 dark:text-white">${alert.title}</h4>
+                                    <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${colorClass}">${alert.severity}</span>
+                                </div>
+                                <p class="text-xs text-gray-500 mt-1">${alert.message}</p>
+                                <p class="text-[10px] text-gray-400 mt-2">${new Date(alert.date).toLocaleDateString()} • ${new Date(alert.date).toLocaleTimeString()}</p>
+                                ${alert.link ? `
+                                <button onclick="router.navigate('${alert.link}')" class="mt-2 text-xs font-semibold text-primary flex items-center gap-1">
+                                    View Details <span class="material-icons-round text-sm">arrow_forward</span>
+                                </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('')}
         </main>`;
     },
 
@@ -860,6 +1100,11 @@ const Views = {
 const router = {
     navigate: (viewName) => {
         state.currentView = viewName;
+        if (viewName === 'STAFF_LIST') {
+            DataService.fetchAllStaff();
+        } else if (viewName === 'RISK_CENTER') {
+            DataService.fetchRiskAlerts();
+        }
         render();
     }
 };
