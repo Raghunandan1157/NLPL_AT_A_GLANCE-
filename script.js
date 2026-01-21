@@ -13,6 +13,16 @@ const state = {
     darkMode: false,
     selectedRegion: null,
     selectedBranch: null,
+    // Bucket detail modal
+    bucketModal: {
+        show: false,
+        bucketName: '',
+        entityName: '',
+        demand: 0,
+        collection: 0,
+        accounts: 0,
+        collectedAccounts: 0
+    },
     // Date filter
     dateFilter: {
         selectedDates: [new Date()],
@@ -164,18 +174,51 @@ const DataService = {
                         name: region,
                         totalDemand: 0,
                         achievement: 0,
-                        dpdCounts: { FTOD: 0, '1-30': 0, '31-60': 0, 'PNPA': 0, total: 0 }
+                        dpdCounts: { FTOD: 0, '1-30': 0, '31-60': 0, 'PNPA': 0, total: 0 },
+                        // Bucket-wise demand and collection
+                        bucketData: {
+                            FTOD: { demand: 0, collection: 0, accounts: 0, collectedAccounts: 0 },
+                            '1-30': { demand: 0, collection: 0, accounts: 0, collectedAccounts: 0 },
+                            '31-60': { demand: 0, collection: 0, accounts: 0, collectedAccounts: 0 },
+                            'PNPA': { demand: 0, collection: 0, accounts: 0, collectedAccounts: 0 }
+                        }
                     };
                 }
-                regionsMap[region].totalDemand += parseFloat(row.total_demand_amount) || 0;
-                regionsMap[region].achievement += parseFloat(row.achievement_amount) || 0;
+                const demand = parseFloat(row.total_demand_amount) || 0;
+                const collection = parseFloat(row.achievement_amount) || 0;
+                const demandAccounts = parseInt(row.total_demand_account) || 1;
+                const collectedAccounts = parseInt(row.achievement_account) || 0;
+
+                regionsMap[region].totalDemand += demand;
+                regionsMap[region].achievement += collection;
                 regionsMap[region].dpdCounts.total++;
 
                 const dpd = row.dpd_group_present;
-                if (dpd === 'FTOD' || dpd === '0') regionsMap[region].dpdCounts.FTOD++;
-                else if (dpd === '1-30') regionsMap[region].dpdCounts['1-30']++;
-                else if (dpd === '31-60') regionsMap[region].dpdCounts['31-60']++;
-                else if (dpd === 'PNPA' || dpd === '61-90') regionsMap[region].dpdCounts.PNPA++;
+                if (dpd === 'FTOD' || dpd === '0') {
+                    regionsMap[region].dpdCounts.FTOD++;
+                    regionsMap[region].bucketData.FTOD.demand += demand;
+                    regionsMap[region].bucketData.FTOD.collection += collection;
+                    regionsMap[region].bucketData.FTOD.accounts += demandAccounts;
+                    regionsMap[region].bucketData.FTOD.collectedAccounts += collectedAccounts;
+                } else if (dpd === '1-30') {
+                    regionsMap[region].dpdCounts['1-30']++;
+                    regionsMap[region].bucketData['1-30'].demand += demand;
+                    regionsMap[region].bucketData['1-30'].collection += collection;
+                    regionsMap[region].bucketData['1-30'].accounts += demandAccounts;
+                    regionsMap[region].bucketData['1-30'].collectedAccounts += collectedAccounts;
+                } else if (dpd === '31-60') {
+                    regionsMap[region].dpdCounts['31-60']++;
+                    regionsMap[region].bucketData['31-60'].demand += demand;
+                    regionsMap[region].bucketData['31-60'].collection += collection;
+                    regionsMap[region].bucketData['31-60'].accounts += demandAccounts;
+                    regionsMap[region].bucketData['31-60'].collectedAccounts += collectedAccounts;
+                } else if (dpd === 'PNPA' || dpd === '61-90') {
+                    regionsMap[region].dpdCounts.PNPA++;
+                    regionsMap[region].bucketData.PNPA.demand += demand;
+                    regionsMap[region].bucketData.PNPA.collection += collection;
+                    regionsMap[region].bucketData.PNPA.accounts += demandAccounts;
+                    regionsMap[region].bucketData.PNPA.collectedAccounts += collectedAccounts;
+                }
             });
 
             // Convert to array and calculate percentages
@@ -188,7 +231,8 @@ const DataService = {
                 ftod: this.calcPercentage(r.dpdCounts.FTOD, r.dpdCounts.total),
                 dpd1_30: this.calcPercentage(r.dpdCounts['1-30'], r.dpdCounts.total),
                 dpd31_60: this.calcPercentage(r.dpdCounts['31-60'], r.dpdCounts.total),
-                pnpa: this.calcPercentage(r.dpdCounts.PNPA, r.dpdCounts.total)
+                pnpa: this.calcPercentage(r.dpdCounts.PNPA, r.dpdCounts.total),
+                bucketData: r.bucketData
             })).sort((a, b) => parseFloat(b.percentage) - parseFloat(a.percentage));
 
             // Calculate overall summary
@@ -247,17 +291,43 @@ const DataService = {
                         code: row.branch_code,
                         totalDemand: 0,
                         achievement: 0,
-                        dpdCounts: { FTOD: 0, '1-30': 0, '31-60': 0, total: 0 }
+                        dpdCounts: { FTOD: 0, '1-30': 0, '31-60': 0, total: 0 },
+                        bucketData: {
+                            FTOD: { demand: 0, collection: 0, accounts: 0, collectedAccounts: 0 },
+                            '1-30': { demand: 0, collection: 0, accounts: 0, collectedAccounts: 0 },
+                            '31-60': { demand: 0, collection: 0, accounts: 0, collectedAccounts: 0 }
+                        }
                     };
                 }
-                branchesMap[branch].totalDemand += parseFloat(row.total_demand_amount) || 0;
-                branchesMap[branch].achievement += parseFloat(row.achievement_amount) || 0;
+                const demand = parseFloat(row.total_demand_amount) || 0;
+                const collection = parseFloat(row.achievement_amount) || 0;
+                const demandAccounts = parseInt(row.total_demand_account) || 1;
+                const collectedAccounts = parseInt(row.achievement_account) || 0;
+
+                branchesMap[branch].totalDemand += demand;
+                branchesMap[branch].achievement += collection;
                 branchesMap[branch].dpdCounts.total++;
 
                 const dpd = row.dpd_group_present;
-                if (dpd === 'FTOD' || dpd === '0') branchesMap[branch].dpdCounts.FTOD++;
-                else if (dpd === '1-30') branchesMap[branch].dpdCounts['1-30']++;
-                else if (dpd === '31-60') branchesMap[branch].dpdCounts['31-60']++;
+                if (dpd === 'FTOD' || dpd === '0') {
+                    branchesMap[branch].dpdCounts.FTOD++;
+                    branchesMap[branch].bucketData.FTOD.demand += demand;
+                    branchesMap[branch].bucketData.FTOD.collection += collection;
+                    branchesMap[branch].bucketData.FTOD.accounts += demandAccounts;
+                    branchesMap[branch].bucketData.FTOD.collectedAccounts += collectedAccounts;
+                } else if (dpd === '1-30') {
+                    branchesMap[branch].dpdCounts['1-30']++;
+                    branchesMap[branch].bucketData['1-30'].demand += demand;
+                    branchesMap[branch].bucketData['1-30'].collection += collection;
+                    branchesMap[branch].bucketData['1-30'].accounts += demandAccounts;
+                    branchesMap[branch].bucketData['1-30'].collectedAccounts += collectedAccounts;
+                } else if (dpd === '31-60') {
+                    branchesMap[branch].dpdCounts['31-60']++;
+                    branchesMap[branch].bucketData['31-60'].demand += demand;
+                    branchesMap[branch].bucketData['31-60'].collection += collection;
+                    branchesMap[branch].bucketData['31-60'].accounts += demandAccounts;
+                    branchesMap[branch].bucketData['31-60'].collectedAccounts += collectedAccounts;
+                }
             });
 
             state.data.branches = Object.values(branchesMap).map(b => ({
@@ -269,7 +339,8 @@ const DataService = {
                 percentage: this.calcPercentage(b.achievement, b.totalDemand),
                 ftod: this.calcPercentage(b.dpdCounts.FTOD, b.dpdCounts.total),
                 dpd1_30: this.calcPercentage(b.dpdCounts['1-30'], b.dpdCounts.total),
-                dpd31_60: this.calcPercentage(b.dpdCounts['31-60'], b.dpdCounts.total)
+                dpd31_60: this.calcPercentage(b.dpdCounts['31-60'], b.dpdCounts.total),
+                bucketData: b.bucketData
             })).sort((a, b) => parseFloat(b.percentage) - parseFloat(a.percentage));
 
         } catch (error) {
@@ -432,14 +503,73 @@ const Components = {
         </div>`;
     },
 
-    MetricSmall: (label, value, trend, color) => {
+    MetricSmall: (label, value, trend, color, clickData = null) => {
         const icon = trend === 'up' ? 'arrow_upward' : trend === 'down' ? 'arrow_downward' : 'check';
+        const clickHandler = clickData ? `onclick="event.stopPropagation(); actions.showBucketDetail('${clickData.bucket}', '${clickData.entity.replace(/'/g, "\\'")}', ${clickData.demand}, ${clickData.collection}, ${clickData.accounts}, ${clickData.collectedAccounts})"` : '';
+        const cursorClass = clickData ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg p-1 -m-1 transition-colors' : '';
         return `
-        <div class="text-center">
+        <div class="text-center ${cursorClass}" ${clickHandler}>
             <p class="text-[10px] text-gray-500">${label}</p>
             <div class="flex items-center justify-center gap-1 ${color}">
                 <span class="material-icons-round text-[10px]">${icon}</span>
                 <span class="text-xs font-bold">${value}%</span>
+            </div>
+        </div>`;
+    },
+
+    BucketDetailModal: () => {
+        if (!state.bucketModal.show) return '';
+
+        const { bucketName, entityName, demand, collection, accounts, collectedAccounts } = state.bucketModal;
+        const percentage = demand > 0 ? ((collection / demand) * 100).toFixed(2) : 0;
+        const accountPercentage = accounts > 0 ? ((collectedAccounts / accounts) * 100).toFixed(2) : 0;
+
+        return `
+        <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onclick="actions.closeBucketDetail()">
+            <div class="bg-surface-light dark:bg-surface-dark rounded-2xl w-full max-w-sm p-5 animate-slide-up shadow-xl" onclick="event.stopPropagation()">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-900 dark:text-white">${bucketName} Bucket</h3>
+                        <p class="text-xs text-gray-500">${entityName}</p>
+                    </div>
+                    <button onclick="actions.closeBucketDetail()" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <span class="material-icons-round text-gray-500">close</span>
+                    </button>
+                </div>
+
+                <!-- Amount Details -->
+                <div class="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 mb-3">
+                    <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-3">Amount</p>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm text-gray-600 dark:text-gray-300">Demand</span>
+                        <span class="text-sm font-bold text-gray-900 dark:text-white">${DataService.formatCurrency(demand)}</span>
+                    </div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm text-gray-600 dark:text-gray-300">Collection</span>
+                        <span class="text-sm font-bold text-green-600">${DataService.formatCurrency(collection)}</span>
+                    </div>
+                    <div class="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Achievement</span>
+                        <span class="text-sm font-bold ${parseFloat(percentage) >= 70 ? 'text-green-600' : parseFloat(percentage) >= 40 ? 'text-orange-500' : 'text-red-500'}">${percentage}%</span>
+                    </div>
+                </div>
+
+                <!-- Account Details -->
+                <div class="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+                    <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-3">Accounts</p>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm text-gray-600 dark:text-gray-300">Total Accounts</span>
+                        <span class="text-sm font-bold text-gray-900 dark:text-white">${accounts}</span>
+                    </div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm text-gray-600 dark:text-gray-300">Collected</span>
+                        <span class="text-sm font-bold text-green-600">${collectedAccounts}</span>
+                    </div>
+                    <div class="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Coverage</span>
+                        <span class="text-sm font-bold ${parseFloat(accountPercentage) >= 70 ? 'text-green-600' : parseFloat(accountPercentage) >= 40 ? 'text-orange-500' : 'text-red-500'}">${accountPercentage}%</span>
+                    </div>
+                </div>
             </div>
         </div>`;
     },
@@ -456,7 +586,7 @@ const Components = {
 
         const metricsHtml = metrics ? `
         <div class="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-            ${metrics.map(m => Components.MetricSmall(m.label, m.value, m.trend, m.color)).join('')}
+            ${metrics.map(m => Components.MetricSmall(m.label, m.value, m.trend, m.color, m.clickData)).join('')}
         </div>` : '';
 
         return `
@@ -624,20 +754,23 @@ const Views = {
             </div>
 
             <div class="space-y-3">
-                ${regions.slice(0, 10).map(region => Components.ListItem({
-            initials: region.initials,
-            title: region.name,
-            subtitle: `Target: ${DataService.formatCurrency(region.totalDemand)}`,
-            value: `${region.percentage}%`,
-            valueLabel: 'Collection',
-            theme: getThemeByPercentage(region.percentage),
-            onClick: `actions.selectRegion('${region.name.replace(/'/g, "\\'")}')`,
-            metrics: [
-                { label: 'FTOD', value: region.ftod, trend: getTrend(region.ftod), color: getTrendColor(region.ftod) },
-                { label: '1-30', value: region.dpd1_30, trend: getTrend(region.dpd1_30), color: getTrendColor(region.dpd1_30) },
-                { label: '31-60', value: region.dpd31_60, trend: getTrend(region.dpd31_60), color: getTrendColor(region.dpd31_60) }
-            ]
-        })).join('')}
+                ${regions.slice(0, 10).map(region => {
+                    const bd = region.bucketData || { FTOD: {demand:0,collection:0,accounts:0,collectedAccounts:0}, '1-30': {demand:0,collection:0,accounts:0,collectedAccounts:0}, '31-60': {demand:0,collection:0,accounts:0,collectedAccounts:0} };
+                    return Components.ListItem({
+                        initials: region.initials,
+                        title: region.name,
+                        subtitle: `Target: ${DataService.formatCurrency(region.totalDemand)}`,
+                        value: `${region.percentage}%`,
+                        valueLabel: 'Collection',
+                        theme: getThemeByPercentage(region.percentage),
+                        onClick: `actions.selectRegion('${region.name.replace(/'/g, "\\'")}')`,
+                        metrics: [
+                            { label: 'FTOD', value: region.ftod, trend: getTrend(region.ftod), color: getTrendColor(region.ftod), clickData: { bucket: 'FTOD', entity: region.name, demand: bd.FTOD.demand, collection: bd.FTOD.collection, accounts: bd.FTOD.accounts, collectedAccounts: bd.FTOD.collectedAccounts } },
+                            { label: '1-30', value: region.dpd1_30, trend: getTrend(region.dpd1_30), color: getTrendColor(region.dpd1_30), clickData: { bucket: '1-30', entity: region.name, demand: bd['1-30'].demand, collection: bd['1-30'].collection, accounts: bd['1-30'].accounts, collectedAccounts: bd['1-30'].collectedAccounts } },
+                            { label: '31-60', value: region.dpd31_60, trend: getTrend(region.dpd31_60), color: getTrendColor(region.dpd31_60), clickData: { bucket: '31-60', entity: region.name, demand: bd['31-60'].demand, collection: bd['31-60'].collection, accounts: bd['31-60'].accounts, collectedAccounts: bd['31-60'].collectedAccounts } }
+                        ]
+                    });
+                }).join('')}
             </div>
         </main>
         `;
@@ -674,20 +807,23 @@ const Views = {
             </div>
 
             <div class="space-y-3">
-                ${branches.length === 0 ? Components.EmptyState('No branch data available') : branches.map(branch => Components.ListItem({
-            initials: branch.initials,
-            title: branch.name,
-            subtitle: `Target: ${DataService.formatCurrency(branch.totalDemand)}`,
-            value: `${branch.percentage}%`,
-            valueLabel: 'Collection',
-            theme: getThemeByPercentage(branch.percentage),
-            onClick: `actions.selectBranch('${branch.name.replace(/'/g, "\\'")}')`,
-            metrics: [
-                { label: 'FTOD', value: branch.ftod, trend: getTrend(branch.ftod), color: getTrendColor(branch.ftod) },
-                { label: '1-30', value: branch.dpd1_30, trend: getTrend(branch.dpd1_30), color: getTrendColor(branch.dpd1_30) },
-                { label: '31-60', value: branch.dpd31_60, trend: getTrend(branch.dpd31_60), color: getTrendColor(branch.dpd31_60) }
-            ]
-        })).join('')}
+                ${branches.length === 0 ? Components.EmptyState('No branch data available') : branches.map(branch => {
+                    const bd = branch.bucketData || { FTOD: {demand:0,collection:0,accounts:0,collectedAccounts:0}, '1-30': {demand:0,collection:0,accounts:0,collectedAccounts:0}, '31-60': {demand:0,collection:0,accounts:0,collectedAccounts:0} };
+                    return Components.ListItem({
+                        initials: branch.initials,
+                        title: branch.name,
+                        subtitle: `Target: ${DataService.formatCurrency(branch.totalDemand)}`,
+                        value: `${branch.percentage}%`,
+                        valueLabel: 'Collection',
+                        theme: getThemeByPercentage(branch.percentage),
+                        onClick: `actions.selectBranch('${branch.name.replace(/'/g, "\\'")}')`,
+                        metrics: [
+                            { label: 'FTOD', value: branch.ftod, trend: getTrend(branch.ftod), color: getTrendColor(branch.ftod), clickData: { bucket: 'FTOD', entity: branch.name, demand: bd.FTOD.demand, collection: bd.FTOD.collection, accounts: bd.FTOD.accounts, collectedAccounts: bd.FTOD.collectedAccounts } },
+                            { label: '1-30', value: branch.dpd1_30, trend: getTrend(branch.dpd1_30), color: getTrendColor(branch.dpd1_30), clickData: { bucket: '1-30', entity: branch.name, demand: bd['1-30'].demand, collection: bd['1-30'].collection, accounts: bd['1-30'].accounts, collectedAccounts: bd['1-30'].collectedAccounts } },
+                            { label: '31-60', value: branch.dpd31_60, trend: getTrend(branch.dpd31_60), color: getTrendColor(branch.dpd31_60), clickData: { bucket: '31-60', entity: branch.name, demand: bd['31-60'].demand, collection: bd['31-60'].collection, accounts: bd['31-60'].accounts, collectedAccounts: bd['31-60'].collectedAccounts } }
+                        ]
+                    });
+                }).join('')}
             </div>
         </main>`;
     },
@@ -951,6 +1087,23 @@ const actions = {
         state.dateFilter.showPicker = false;
         state.dateFilter.userSelected = true;
         DataService.fetchDashboardData();
+    },
+    // Bucket Detail Modal Actions
+    showBucketDetail: (bucketName, entityName, demand, collection, accounts, collectedAccounts) => {
+        state.bucketModal = {
+            show: true,
+            bucketName,
+            entityName,
+            demand,
+            collection,
+            accounts,
+            collectedAccounts
+        };
+        render();
+    },
+    closeBucketDetail: () => {
+        state.bucketModal.show = false;
+        render();
     }
 };
 
@@ -959,9 +1112,9 @@ function render() {
     const viewFn = Views[state.currentView];
 
     if (viewFn) {
-        app.innerHTML = viewFn();
+        app.innerHTML = viewFn() + Components.BucketDetailModal();
     } else {
-        app.innerHTML = Views.GLOBAL_DASHBOARD();
+        app.innerHTML = Views.GLOBAL_DASHBOARD() + Components.BucketDetailModal();
     }
 
     // Update Bottom Nav Active State
